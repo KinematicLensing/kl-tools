@@ -63,15 +63,15 @@ def main(args, pool):
     utils.make_dir(outdir)
 
     true_pars = {
-        # 'g1': 0.05,
-        # 'g2': -0.025,
-        'g1': 0.0,
-        'g2': 0.0,
-        'theta_int': np.pi / 3,
+        'g1': 0.05,
+        'g2': -0.025,
+        # 'g1': 0.0,
+        # 'g2': 0.0,
+        'theta_int': 0.,
         'sini': 0.8,
         'v0': 10.,
         'vcirc': 200,
-        'rscale': 5,
+        'rscale': 2,
     }
 
     # additional args needed for prior / likelihood evaluation
@@ -102,9 +102,9 @@ def main(args, pool):
         'priors': {
             'g1': priors.GaussPrior(0., 0.1),#, clip_sigmas=2),
             'g2': priors.GaussPrior(0., 0.1),#, clip_sigmas=2),
-            'theta_int': priors.UniformPrior(0., np.pi),
+            'theta_int': priors.UniformPrior(-np.pi/2., np.pi/2.),
             # 'theta_int': priors.UniformPrior(np.pi/3, np.pi),
-            'sini': priors.UniformPrior(-1., 1.),
+            'sini': priors.UniformPrior(0., 1.),
             'v0': priors.UniformPrior(0, 20),
             'vcirc': priors.GaussPrior(200, 10),# clip_sigmas=2),
             # 'vcirc': priors.UniformPrior(190, 210),
@@ -126,7 +126,7 @@ def main(args, pool):
         # 'psf': gs.Gaussian(fwhm=3), # fwhm in pixels
         'use_numba': False,
     }
-
+    # build grid, we dont want too long grid
     li, le, dl = 655.8, 656.8, 0.1
     lambdas = [(l, l+dl) for l in np.arange(li, le, dl)]
 
