@@ -304,7 +304,7 @@ def _setup_sed(pars):
     '''
     Build interpolation table for normalized emission line SED
 
-    pars: dict contianing emission line parameters
+    pars: dict containing emission line parameters
 
     TODO: See if constructing the SED once and passing it in args
           will cause problems for optimizations
@@ -386,7 +386,8 @@ def _setup_test_datacube(shape, lambdas, bandpasses, sed, true_pars, pars):
 
     imap_pars = {
         'flux': pars['true_flux'],
-        'hlr': pars['true_hlr']
+        'hlr': pars['true_hlr'],
+        'scale': pars['true_scale'],
     }
 
     # a slight abuse of API call here, passing a dummy datacube to
@@ -463,6 +464,7 @@ def setup_test_pars(nx, ny):
     pars = {
         'true_flux': 1e5, # counts
         'true_hlr': 5, # pixels
+        'true_scale':1., # pixel scale
         'v_unit': Unit('km / s'),
         'r_unit': Unit('kpc'),
         'z': z,
@@ -508,6 +510,7 @@ def main(args):
         'Ny': 30, # pixels
         'true_flux': 1e4, # counts
         'true_hlr': 3, # pixels
+        'true_scale': 1., # pixel scale
         'v_unit': Unit('km / s'),
         'r_unit': Unit('kpc'),
         'line_std': 2, # emission line SED std; nm

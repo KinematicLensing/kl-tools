@@ -76,13 +76,14 @@ def main(args, pool):
 
     # additional args needed for prior / likelihood evaluation
     halpha = 656.28 # nm
-    R = 5000.
+    R = 5000. # is this constant across the spectral range?
     z = 0.3
     pars = {
         'Nx': 30, # pixels
         'Ny': 30, # pixels
         'true_flux': 1e5, # counts
         'true_hlr': 5, # pixels
+        'true_scale':1, # pixel scale
         'v_unit': Unit('km / s'),
         'r_unit': Unit('kpc'),
         'z': z,
@@ -115,6 +116,7 @@ def main(args, pool):
             'type': 'inclined_exp',
             'flux': 1e5, # counts
             'hlr': 5, # pixels
+            'scale':1., # pixel scale
             # 'type': 'basis',
             # 'basis_type': 'shapelets',
             # 'basis_kwargs': {
@@ -133,6 +135,7 @@ def main(args, pool):
     Nx, Ny = 30, 30
     Nspec = len(lambdas)
     shape = (Nx, Ny, Nspec)
+
     print('Setting up test datacube and true Halpha image')
     datacube, sed, vmap, true_im = likelihood.setup_likelihood_test(
         true_pars, pars, shape, lambdas
@@ -188,10 +191,12 @@ def main(args, pool):
     else:
         plt.close()
 
+    ### setup MCMC
     if sampler == 'zeus':
         print('Setting up KLensZeusRunner')
         ndims = len(PARS_ORDER)
         nwalkers = 2*ndims
+        # you may want to write your own ``log_posterior`` function
         runner = KLensZeusRunner(
             nwalkers, ndims, log_posterior, datacube, pars
             )

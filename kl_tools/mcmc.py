@@ -88,7 +88,7 @@ class MCMCRunner(object):
         TODO: Not obvious that this scale factor is reasonable
         for our problem, should experiment & test further
 
-        Zeus reccommends to initialize in a small ball around the MAP
+        Zeus recommends to initialize in a small ball around the MAP
         estimate, but that is of course difficult to know a priori
 
         Might want to base this as some fractional scale for the width of

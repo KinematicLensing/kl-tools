@@ -176,19 +176,21 @@ def _compute_log_det(imap, pars):
     return log_det
 
 # @njit
-def _log_likelihood(datacube, modelcube, inv_cov):
+def _log_likelihood_grism(datacube, args, inv_cov):
     '''
     datacube: real, numpy array
         This is the instrument-specific data vector, could be 1d spectrum,
         2d image or 3d IFU. In the case of grism, it is a 2d trimmed image
 
+    NOTE: the API is not fixed so do whatever you want, then tune the API
     modelcube: real, 3D numpy array
         This is the model cube (literally a cube) which contains the 
         information we need to calculate grism image
+        intensity map: with PSF applied
+        velocity map: use high-res SED?
 
     inv_cov: real, 2D array
         This is the inverse covariance matrix for grism image
-    '''
 
     # generate grism image from modelcube
 
@@ -196,8 +198,36 @@ def _log_likelihood(datacube, modelcube, inv_cov):
     # 1. figure out the structure of ``datacube`` object and ``modelcube`` object
     # 2. should also pass pars dict into this function to figure out dispersion
     # 3. after figuring out the object structure, do the disperse-stack process
-    # 4. apply noise
+    # 4. apply noise?
+    '''
+    # unpack parameters
+    # available parameters: lambdas, vmap, imap, sed, pars
+    modelcube = args[0] # 3D model cube
+    pars = args[1] # parameters dict
+        
+def _setup_model_vector(modelcube, pars):
+    '''
+    compute model vector
+    inputs
+    ------
+    modelcube: float, numpy array, Nx x Ny x Nspec
+        This is the 3D intensity-spectrum modelcube, with PSF applied
+    pars: dict
+        This is the parameter dictionary used for model vector calculation
 
+    returns:
+    --------
+    grism_map: float, numpy array, Nx x Ny
+        This is the predicted GRISM image
+    '''
+    Nx, Ny, Nspec  = modelcube.Nx, modelcube.Ny, modelcube.Nspec 
+    # determine dispersion relation
+    dxdl = 2./(1000./pars['spec_resolution']) # 2 pixels per lambda resolution
+    # assume pars['spec_resolution'] is calculated at 1 micron
+    offset = -1*pars['line_value']*(1.+pars['z'])*dxdl
+    model_vector = np.zeros((Nx, Ny))
+    for islice in range(Nspec):
+        lam = lambdas[islice]
 
 
 

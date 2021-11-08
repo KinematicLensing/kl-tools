@@ -32,7 +32,7 @@ parser.add_argument('--test', action='store_true', default=False,
 
 class IntensityMap(object):
 
-    def __init__(self, name, nx, ny):
+    def __init__(self, name, nx, ny, scale):
         '''
         name: str
             Name of intensity map type
@@ -40,6 +40,8 @@ class IntensityMap(object):
             Size of image on x-axis
         ny: int
             Size of image on y-axis
+        scale: real
+            Pixel scale
         '''
 
         if not isinstance(name, str):
@@ -51,6 +53,10 @@ class IntensityMap(object):
                 raise TypeError('IntensityMap image size params must be ints!')
         self.nx = nx
         self.ny = ny
+
+        if not isinstance(scale, (float, int)):
+            raise TypeError('IntensityMap pixel scale params must be float or int!')
+        self.scale = scale
 
         self.image = None
 
@@ -126,7 +132,7 @@ class InclinedExponential(IntensityMap):
     testing anyway
     '''
 
-    def __init__(self, datacube, flux=None, hlr=None):
+    def __init__(self, datacube, flux=None, hlr=None, scale=None):
         '''
         datacube: DataCube
             While this implementation will not use the datacube
@@ -135,10 +141,12 @@ class InclinedExponential(IntensityMap):
             Object flux
         hlr: float
             Object half-light radius (in pixels)
+        scale: float
+            Pixel scale (in arcsec)
         '''
 
         nx, ny = datacube.Nx, datacube.Ny
-        super(InclinedExponential, self).__init__('inclined_exp', nx, ny)
+        super(InclinedExponential, self).__init__('inclined_exp', nx, ny, scale)
 
         pars = {'flux': flux, 'hlr': hlr}
         for name, val in pars.items():
@@ -201,7 +209,8 @@ class InclinedExponential(IntensityMap):
             psf = pars['psf']
             gal = gs.Convolve([gal, psf])
 
-        self.image = gal.drawImage(nx=self.nx, ny=self.ny).array
+        self.image = gal.drawImage(nx=self.nx, ny=self.ny, 
+                                   scale=self.scale).array
 
         return self.image
 
