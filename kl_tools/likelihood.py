@@ -355,7 +355,7 @@ def _setup_inv_cov_matrix(pars):
 
     return inv_cov
 
-def setup_likelihood_test(true_pars, pars, shape, lambdas):
+def setup_likelihood_test(true_pars, pars, shape, lambdas, noisy=True):
 
     throughput = pars['bandpass_throughput']
     unit = pars['bandpass_unit']
@@ -372,12 +372,12 @@ def setup_likelihood_test(true_pars, pars, shape, lambdas):
     sed = _setup_sed(pars)
 
     datacube, vmap, true_im = _setup_test_datacube(
-        shape, lambdas, bandpasses, sed, true_pars, pars
+        shape, lambdas, bandpasses, sed, true_pars, pars, noisy=noisy
         )
 
     return datacube, sed, vmap, true_im
 
-def _setup_test_datacube(shape, lambdas, bandpasses, sed, true_pars, pars):
+def _setup_test_datacube(shape, lambdas, bandpasses, sed, true_pars, pars, noisy=True):
     '''
     TODO: Restructure to allow for more general truth input
     '''
@@ -422,10 +422,11 @@ def _setup_test_datacube(shape, lambdas, bandpasses, sed, true_pars, pars):
             lambdas[i], sed_array, zfactor, true_im
             )
 
-        obs_im = gs.Image(obs_array)
+        obs_im = gs.Image(obs_array, scale=pars['true_scale'])
 
-        noise = gs.GaussianNoise(sigma=pars['cov_sigma'])
-        obs_im.addNoise(noise)
+        if noisy:
+            noise = gs.GaussianNoise(sigma=pars['cov_sigma'])
+            obs_im.addNoise(noise)
 
         data[:,:,i] = obs_im.array
 

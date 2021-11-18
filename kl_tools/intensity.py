@@ -208,9 +208,10 @@ class InclinedExponential(IntensityMap):
         if 'psf' in pars:
             psf = pars['psf']
             gal = gs.Convolve([gal, psf])
-
+        # if we want to use the resulting image array to reconstruct an GSObject
+        # while conserving the flux, `no_pixel` is a good choice
         self.image = gal.drawImage(nx=self.nx, ny=self.ny, 
-                                   scale=self.scale).array
+                                   scale=self.scale, method='no_pixel').array
 
         return self.image
 

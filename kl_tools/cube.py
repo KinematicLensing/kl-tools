@@ -73,7 +73,7 @@ class DataCube(object):
             A numpy array containing all image slice data.
             For now, assumed to be the shape format given below.
         shape: tuple
-            A 3-tuple in the format of (Nspec, Nx, Ny)
+            A 3-tuple in the format of (Nx, Ny, Nspec)
             where (Nx, Ny) are the shapes of the image slices
             and Nspec is the Number of spectral slices.
         bandpasses: list
@@ -421,6 +421,282 @@ class Slice(object):
             plt.close()
 
         return
+
+class ModelCube(object):
+#     '''
+#     Base class for an abstract model cube.
+#     Contains astronomical images of a source
+#     at various wavelength slices
+#     '''
+
+    def __init__(self, data=None, shape=None, bandpasses=None):
+        '''
+        Initialize either a filled DataCube from an existing numpy
+        array or an empty one from a given shape
+
+        data: np.array
+            A numpy array containing all image slice data.
+            For now, assumed to be the shape format given below.
+        shape: tuple
+            A 3-tuple in the format of (Nspec, Ny, Nx)
+            where (Nx, Ny) are the shapes of the image slices
+            and Nspec is the Number of spectral slices.
+        bandpasses: list
+            A list of galsim.Bandpass objects containing
+            throughput function, lambda window, etc.
+        '''
+
+        if data is None:
+            if shape is None:
+                raise ValueError('Must instantiate a DataCube with either ' + \
+                                 'a data array or a shape tuple!')
+            # note that when plotting the image with plt.imshow(), the fast-axis
+            # is shown along x-axis. Also, when applying grism dispersion, we want
+            # the model cube as an iterable, can pop one slice each time, so we 
+            # save the model cube in dimension [Nspec, Ny, Nx]
+            self.Nspec = shape[0]
+            self.Ny = shape[1]
+            self.Nx = shape[2]
+            
+            self.shape = shape
+
+            self._check_shape_params()
+            self._data = np.zeros(self.shape)
+
+        else:
+            assert len(data.shape) == 3
+
+            if bandpasses is None:
+                raise ValueError('Must pass bandpasses if data is not None!')
+
+            self._data = data
+            self.shape = data.shape
+
+            if data.shape[0] != len(bandpasses):
+                raise ValueError('The length of the bandpasses must ' + \
+                                 'equal the length of the third data dimension!')
+            self.Nspec = self.shape[0]
+            self.Nx = self.shape[2]
+            self.Ny = self.shape[1]
+
+        # a bit awkward, but this allows flexible setup for other params
+        if bandpasses is None:
+            raise ValueError('Must pass a list of bandpasses!')
+        self.bandpasses = bandpasses
+
+        # Not necessarily needed, but could help ease of access
+        self.lambda_unit = self.bandpasses[0].wave_type
+        self.lambdas = [] # Tuples of bandpass bounds in unit of bandpass
+        for bp in bandpasses:
+            li = bp.blue_limit
+            le = bp.red_limit
+            self.lambdas.append((li, le))
+
+            # Make sure units are consistent
+            # (could generalize, but not necessary)
+            assert bp.wave_type == self.lambda_unit
+
+        self._construct_slice_list()
+
+        return
+
+    def _check_shape_params(self):
+        Nzip = zip(['Nx', 'Ny', 'Nspec'], [self.Nx, self.Ny, self.Nspec])
+        for name, val in Nzip:
+            if val < 1:
+                raise ValueError(f'{name} must be greater than 0!')
+
+        if len(self.shape) != 3:
+            raise ValueError('DataCube.shape must be len 3!')
+
+        return
+
+    def _construct_slice_list(self):
+        self.slices = SliceList()
+
+        for i in range(self.Nspec):
+            bp = self.bandpasses[i]
+            self.slices.append(Slice(self._data[i,:,:], bp))
+
+        return
+
+    def compute_aperture_spectrum(self, radius, offset=(0,0), plot_mask=False):
+        '''
+        radius: aperture radius in pixels
+        offset: aperture center offset tuple in pixels about slice center
+        '''
+
+        mask = np.zeros((self.Ny, self.Nx), dtype=np.dtype(bool))
+
+        im_center = (self.Nx/2, self.Ny/2)
+        center = np.array(im_center) + np.array(offset)
+
+        aper_spec = np.zeros(self.Nspec)
+
+        for x in range(self.Nx):
+            for y in range(self.Ny):
+                dist = np.sqrt((x-center[0])**2+(y-center[1])**2)
+                if dist < radius:
+                    aper_spec += self._get_pixel_spectrum(x,y)
+                    mask[y,x] = True
+
+        # aper_spec = np.sum(self._data[mask, :])
+
+        if plot_mask is True:
+            plt.imshow(mask, origin='lower')
+
+            cx, cy = center[0], center[1]
+            circle = plt.Circle((cx,cy), radius, color='r', fill=False,
+                                lw=3, label='Aperture')
+
+            ax = plt.gca()
+            ax.add_patch(circle)
+            plt.legend()
+            plt.show()
+
+        return aper_spec
+
+    def plot_aperture_spectrum(self, radius, offset=(0,0), size=None,
+                               title=None, outfile=None, show=True,
+                               close=True):
+
+        aper_spec = self.compute_aperture_spectrum(radius, offset=offset)
+        lambda_means = np.mean(self.lambdas, axis=1)
+
+        plt.plot(lambda_means, aper_spec)
+        plt.xlabel(f'Lambda ({self.lambda_unit})')
+        plt.ylabel(f'Flux (ADUs)')
+
+        if title is not None:
+            plt.title(title)
+        else:
+            plt.title(f'Aperture spectrum for radius={radius} pixels; ' +\
+                      f'offset={offset}')
+
+        if size is not None:
+            plt.gcf().set_size_inches(size)
+
+        if outfile is not None:
+            plt.savefig(outfile, bbox_inches='tight')
+
+        if show is True:
+            plt.show()
+        elif close is True:
+            plt.close()
+
+        return
+
+    def compute_pixel_spectrum(self, i, j):
+        '''
+        Compute the spectrum of the pixel (i,j) across
+        all slices
+
+        # TODO: Work out units!
+        '''
+
+        pix_spec = self._get_pixel_spectrum(i,j)
+
+        # presumably some unit conversion...
+
+        # ...
+
+        return pix_spec
+
+    def _get_pixel_spectrum(self, i, j):
+        '''
+        Return the raw spectrum of the pixel (x=i, y=j) across
+        all slices. Note that x-axis is the fast-axis.
+        '''
+
+        return self._data[:,j,i]
+
+    def truncate(self, blue_cut, red_cut, trunc_type='edge'):
+        '''
+        Return a truncated DataCube to slices between blue_cut and
+        red_cut using either the lambda on a slice center or edge
+        '''
+
+        for l in [blue_cut, red_cut]:
+            if (not isinstance(l, float)) and (not isinstance(l, int)):
+                raise ValueError('Truncation wavelengths must be ints or floats!')
+
+        if (blue_cut >= red_cut):
+            raise ValueError('blue_cut must be less than red_cut!')
+
+        if trunc_type not in ['edge', 'center']:
+            raise ValueError('trunc_type can only be at the edge or center!')
+
+        if trunc_type == 'center':
+            # truncate on slice center lambda value
+            lambda_means = np.mean(self.lambdas, axis=1)
+
+            cut = (lambda_means >= blue_cut) & (lambda_means <= red_cut)
+
+        else:
+            # truncate on slice lambda edge values
+            lambda_blues = np.array([self.lambdas[i][0] for i in range(self.Nspec)])
+            lambda_reds  = np.array([self.lambdas[i][1] for i in range(self.Nspec)])
+
+            cut = (lambda_blues >= blue_cut) & (lambda_reds  <= red_cut)
+
+        # could either update attributes or return new DataCube
+        # for now, just return a new one
+        trunc_data = self._data[cut,:,:]
+
+        # Have to do it this way as lists cannot be indexed by np arrays
+        # trunc_bandpasses = self.bandpasses[cut]
+        trunc_bandpasses = [self.bandpasses[i]
+                            for i in range(self.Nspec)
+                            if cut[i] == True]
+
+        return DataCube(data=trunc_data, bandpasses=trunc_bandpasses)
+
+    def plot_slice(self, slice_index, plot_kwargs):
+        self.slices[slice_index].plot(**plot_kwargs)
+
+        return
+
+    def plot_pixel_spectrum(self, i, j, show=True, close=True, outfile=None):
+        '''
+        Plot the spectrum for pixel (x=i, y=j) across
+        all slices
+
+        # TODO: Work out units!
+        '''
+
+        pix_spec = self.compute_pixel_spectrum(i,j)
+
+        lambda_means = np.mean(self.lambdas, axis=1)
+        unit = self.lambda_unit
+
+        plt.plot(lambda_means, pix_spec)
+        plt.xlabel(f'Lambda ({unit})')
+        plt.ylabel('Flux (ADU)')
+        plt.title(f'Spectrum for pixel ({i}, {j})')
+
+        if outfile is not None:
+            plt.savefig(outfile, bbox_inches='tight')
+
+        if show is True:
+            plt.show()
+        elif close is True:
+            plt.close()
+
+        return
+
+    def write(self, outfile):
+        d = os.path.dirname(outfile)
+
+        utils.make_dir(d)
+
+        im_list = []
+        for s in self.slices:
+            im_list.append(s._data)
+
+        gs.fits.writeCube(im_list, outfile)
+
+        return
+
 
 # Used for testing
 def main(args):

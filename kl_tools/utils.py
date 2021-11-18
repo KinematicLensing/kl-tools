@@ -22,7 +22,7 @@ def read_yaml(yaml_file):
     with open(yaml_file, 'r') as stream:
         return yaml.safe_load(stream)
 
-def build_map_grid(Nx, Ny):
+def build_map_grid(Nx, Ny, scale=1.0):
     '''
     We define the grid positions as the center of pixels
 
@@ -41,7 +41,7 @@ def build_map_grid(Nx, Ny):
     assert len(x) == Nx
     assert len(y) == Ny
 
-    X, Y = np.meshgrid(x, y)
+    X, Y = np.meshgrid(x*scale, y*scale)
 
     return X, Y
 

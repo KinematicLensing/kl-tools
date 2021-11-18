@@ -202,8 +202,12 @@ def _log_likelihood_grism(datacube, args, inv_cov):
     '''
     # unpack parameters
     # available parameters: lambdas, vmap, imap, sed, pars
-    modelcube = args[0] # 3D model cube
+    modelcube = args[0] # 3D model cube, DataCube object
     pars = args[1] # parameters dict
+    data_vector = _setup_model_vector(modelcube, lambdas, pars)
+    diff = (data_vector - datacube).reshape(Nx*Ny)
+    chi2 = diff.T.dot(inv_cov.dot(diff))
+    return -0.5*chi2
         
 def _setup_model_vector(modelcube, pars):
     '''
@@ -221,13 +225,20 @@ def _setup_model_vector(modelcube, pars):
         This is the predicted GRISM image
     '''
     Nx, Ny, Nspec  = modelcube.Nx, modelcube.Ny, modelcube.Nspec 
+    xgrid, ygrid = np.array(range(Nx)), np.array(range(Ny))
     # determine dispersion relation
     dxdl = 2./(1000./pars['spec_resolution']) # 2 pixels per lambda resolution
     # assume pars['spec_resolution'] is calculated at 1 micron
     offset = -1*pars['line_value']*(1.+pars['z'])*dxdl
     model_vector = np.zeros((Nx, Ny))
     for islice in range(Nspec):
-        lam = lambdas[islice]
+        lam = modelcube.lambdas[islice]
+        DX = (lam*dxdl + offset)*np.cos(pars['dispersion_direction'])
+        DY = (lam*dxdl + offset)*np.sin(pars['dispersion_direction'])
+        model_vector += _interp2d(xgrid-DX, ygrid-DY, modelcube._data[:,:,islice],
+                                  xgrid, ygrid)
+    return model_vector
+
 
 
 
@@ -325,6 +336,35 @@ def _interp1d(table, values, kind='linear'):
         raise ValueError('Non-linear interpolations not yet implemented!')
 
     return interp
+
+def _interp2d(table_xgrid, table_ygrid, table_zvalue, 
+              value_xgrid, value_ygrid, kind='linear'):
+    '''
+    Interpolate table(value)
+    NOTE: we wrap the scipy interpolation routine here as a develop version. 
+    However, since numba do not support scipy interpolation routines, it will be
+    replaced by other numba-compatible interpolation routines in the future.
+
+    table_xgrid: float, 1D numpy array
+        x-values of the table 
+    table_ygrid: float, 1D numpy array
+        y-values of the table
+    table_zvalue: float, 2D numpy array
+        function values evaluated on meshgrid of x-y
+    value_xgrid: float, 1D numpy array
+        x-grid to interpolate the table on
+    value_ygrid: float, 1D numpy array
+        y-grid to interpolate the table on
+    '''
+    if kind == 'linear':
+        # just use scipy linear interpolation as a placeholder
+        kernel = scipy.interpolate.interp2d(table_xgrid, table_ygrid, table_zvalue,
+            kind='linear')
+    else:
+        raise ValueError('Non-linear interpolations not yet implemented!')
+    return kernel[value_xgrid, value_ygrid]
+
+
 
 def _setup_vmap(theta_pars, pars, model_name='default'):
     '''
@@ -476,7 +516,7 @@ def _setup_test_datacube(shape, lambdas, bandpasses, sed, true_pars, pars):
             lambdas[i], sed_array, zfactor, true_im
             )
 
-        obs_im = gs.Image(obs_array)
+        obs_im = gs.Image(obs_array, scale=pars['true_scale'])
 
         noise = gs.GaussianNoise(sigma=pars['cov_sigma'])
         obs_im.addNoise(noise)
