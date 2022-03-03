@@ -213,7 +213,7 @@ class LogLikelihood(LogBase):
         '''
 
         # TODO: May want something more general in the future, but for now
-        #the only likely candidate is the intensity map
+        # the only likely candidate is the intensity map
         # self.marginalize = {}
 
         # names = ['intensity']
@@ -274,8 +274,10 @@ class LogLikelihood(LogBase):
         # TODO: it would be better to pass inv_cov directly,
         # but for now we are only using diagonal inv_cov matrices
         # anyway
-        # log_det = imap.fitter.compute_marginalization_det(inv_cov=inv_cov, log=True)
-        log_det = imap.fitter.compute_marginalization_det(pars=self.pars, log=True)
+        # log_det = imap.fitter.compute_marginalization_det(inv_cov=inv_cov, 
+        #   log=True)
+        log_det = imap.fitter.compute_marginalization_det(pars=self.pars, 
+            log=True)
 
         if log_det == 0:
             print('Warning: determinant is 0. Cannot compute ' +\
@@ -331,6 +333,23 @@ class LogLikelihood(LogBase):
         # loglike2 = -0.5*chi2_2.trace()
 
         return loglike
+
+    @classmethod
+    def _log_likelihood_grism_and_image(cls, datavector, model, inv_cov):
+        ''' Likelihood function for a space-based grism + image KL experiment
+
+        datavector: a list of 2d array
+            Data considered in fitting, includes image and grism spectrum 
+            e.g. (grism 1, grism 2, image 1, image 2, ...)
+
+        model: 3d DataCube (Nspec, Nx, Ny)
+            The model datacube object evaluated at input model parameters
+
+        inv_cov: a list of 2d array
+            Noise covariance matrix (?) of the data in datavector
+
+        '''
+
 
     def _setup_model_datacube(self, theta_pars, datavector):
         '''
@@ -536,8 +555,8 @@ class LogLikelihood(LogBase):
         pars: dict
             dictionary containing parameters needed to build cov matrix
 
-        # TODO: For now, a single cov matrix for each slice. However, this could be
-                generalized to a list of cov matrices
+        # TODO: For now, a single cov matrix for each slice. However, 
+            this could be generalized to a list of cov matrices
         '''
 
         Nx, Ny = self.pars['Nx'], self.pars['Ny']
@@ -555,6 +574,397 @@ class LogLikelihood(LogBase):
         inv_cov = (1./sigma)**2 * identity(Npix)
 
         return inv_cov
+
+class LogLikelihood_Grism(LogBase):
+
+    def __init__(self, parameters, datavector):
+        '''
+        parameters: Pars
+            Pars instance that holds all parameters needed for MCMC
+            run, including SampledPars and MetaPars
+        datavector: DataCube, etc.
+            Arbitrary data vector that subclasses from DataVector.
+            If DataCube, truncated to desired lambda bounds
+        '''
+
+        super(LogLikelihood, self).__init__(parameters, datavector)
+
+        # Sometimes we want to marginalize over parts of the posterior explicitly
+        self._setup_marginalization(self.meta)
+
+        return
+
+    def _setup_marginalization(self, pars):
+        '''
+        Check to see if we need to sample from a marginalized posterior
+
+        pars: MetaPars
+            Dictionary full of run parameters
+        '''
+
+        # TODO: May want something more general in the future, but for now
+        # the only likely candidate is the intensity map
+        # self.marginalize = {}
+
+        # names = ['intensity']
+        # for name in names:
+        #     if hasattr(pars, f'marginalize_{name}'):
+        #         self.marginalize[name] = pars[f'marginalize_{name}']
+        # else:
+        #     self.marginalize[name] = False
+
+        # simple version:
+        key = 'marginalize_intensity'
+        if hasattr(pars, key):
+            self.marginalize_intensity = pars[key]
+        else:
+            self.marginalize_intensity = False
+
+        return
+
+    def __call__(self, theta, datavector):
+        '''
+        Do setup and type / sanity checking here
+        before calling the abstract method _loglikelihood,
+        which will have a different implementation for each class
+
+        theta: list
+            Sampled parameters. Order defined in self.pars_order
+        datavector: DataCube, etc.
+            Arbitrary data vector that subclasses from DataVector.
+            If DataCube, truncated to desired lambda bounds
+        '''
+
+        # unpack sampled params
+        theta_pars = self.theta2pars(theta)
+
+        model_datacube, v_array, i_array = self._setup_model_datacube(
+            theta_pars, datavector
+            )
+
+        # numba can't handle interp tables, so we do it ourselves
+        sed_array = self._setup_sed(self.meta)
+
+        # NOTE: This doesn't currently work with numba
+        inv_cov = self._setup_inv_cov_matrix()
+
+        # if we are computing the marginalized posterior over intensity
+        # map parameters, then we need to scale this likelihood by a
+        # determinant factor
+        if self.marginalize_intensity is True:
+            log_det = self._compute_log_det(imap)
+        else:
+            log_det = 1.
+
+        return (-0.5 * log_det) + self._log_likelihood(
+            datavector, model_datacube, inv_cov
+            )
+
+    def _compute_log_det(self, imap):
+        # TODO: it would be better to pass inv_cov directly,
+        # but for now we are only using diagonal inv_cov matrices
+        # anyway
+        # log_det = imap.fitter.compute_marginalization_det(inv_cov=inv_cov, 
+        #   log=True)
+        log_det = imap.fitter.compute_marginalization_det(pars=self.pars, 
+            log=True)
+
+        if log_det == 0:
+            print('Warning: determinant is 0. Cannot compute ' +\
+                'marginalized posterior over intensity basis functions')
+
+        return log_det
+
+    # @abstractmethod
+    # def _log_likelihood(theta, datavector, pars={}):
+    #     '''
+    #     Natural log of the likelihood. Target function for chosen
+    #     sampler
+
+    #     theta: list
+    #         Sampled parameters, order defined by pars_order
+    #     datavector: DataCube, etc.
+    #         Arbitrary data vector that subclasses from DataVector.
+    #         If DataCube, truncated to desired lambda bounds
+    #     pars: dict
+    #         Dictionary of any other parameters needed to evaluate
+    #         the likelihood
+    #     '''
+    #     pass
+
+    @classmethod
+    def _log_likelihood(cls, datavector, model, inv_cov):
+        '''
+        datavector: DataCube, etc.
+            The datavector that is compared against the model
+        model: DataCube, etc.
+            The model datacube object, truncated to desired lambda bounds
+        inv_cov: np.ndarray, sp.sparse.spmatrix
+            A (Nx*Ny, Nx*Ny) inverse covariance matrix for the image pixels
+        '''
+
+        Nspec = datavector.Nspec
+        Nx, Ny = datavector.Nx, datavector.Ny
+
+        loglike = 0
+
+        # can figure out how to remove this for loop later
+        # will be fast enough with numba anyway
+        for i in range(Nspec):
+
+            diff = (datavector.slice(i) - model.slice(i)).reshape(Nx*Ny)
+            chi2 = diff.T.dot(inv_cov.dot(diff))
+
+            loglike += -0.5*chi2
+
+        # Actually slower due to extra matrix evals...
+        # diff_2 = (datavector.data - model.data).reshape(Nspec, Nx*Ny)
+        # chi2_2 = diff_2.dot(inv_cov.dot(diff_2.T))
+        # loglike2 = -0.5*chi2_2.trace()
+
+        return loglike
+
+    @classmethod
+    def _log_likelihood_grism_and_image(cls, datavector, model, inv_cov):
+        ''' Likelihood function for a space-based grism + image KL experiment
+
+        datavector: a list of 2d array
+            Data considered in fitting, includes image and grism spectrum 
+            e.g. (grism 1, grism 2, image 1, image 2, ...)
+
+        model: 3d DataCube (Nspec, Nx, Ny)
+            The model datacube object evaluated at input model parameters
+
+        inv_cov: a list of 2d array
+            Noise covariance matrix (?) of the data in datavector
+
+        '''
+
+
+    def _setup_model_datacube(self, theta_pars, datavector):
+        '''
+        theta_pars: dict
+            Dictionary of sampled pars
+        datavector: DataCube, etc.
+            Arbitrary data vector that subclasses from DataVector.
+            If DataCube, truncated to desired lambda bounds
+        '''
+
+        # Datavector may not be a datacube itself
+        Nx, Ny = self.pars['Nx'], self.pars['Ny']
+        Nspec = self.pars['Nspec']
+
+        lambdas = np.array(self.pars['lambdas'])
+
+        # create grid of pixel centers in image coords
+        X, Y = utils.build_map_grid(Nx, Ny)
+
+        # create 2D velocity & intensity maps given sampled transformation
+        # parameters
+        vmap = self._setup_vmap(theta_pars, self.meta)
+        imap = self._setup_imap(theta_pars, datavector, self.meta)
+
+        # evaluate maps at pixel centers in obs plane
+        if 'use_numba' in self.pars:
+            use_numba = self.pars['use_numba']
+        else:
+            use_numba = False
+
+        v_array = vmap(
+            'obs', X, Y, normalized=True, use_numba=use_numba
+            )
+
+        i_array = imap.render(theta_pars, datavector, self.meta)
+
+        sed_array = self._setup_sed(self.meta)
+
+        # create datacube
+        shape = (Nspec, Nx, Ny)
+
+        model_datacube = self._construct_model_datacube(
+            shape, lambdas, v_array, i_array
+            )
+
+        return model_datacube, v_array, i_array
+
+    @classmethod
+    def _setup_vmap(cls, theta_pars, pars, model_name='default'):
+        '''
+        theta_pars: dict
+        A dict of the sampled mcmc params for both the velocity
+        map and the tranformation matrices
+        pars: dict
+        A dict of anything else needed to compute the posterior
+        model_name: str
+        The model name to use when constructing the velocity map
+        '''
+
+        vmodel = theta_pars
+
+        for name in ['r_unit', 'v_unit']:
+            if name in pars:
+                vmodel[name] = Unit(pars[name])
+            else:
+                raise AttributeError(f'pars must have a value for {name}!')
+
+        return VelocityMap(model_name, vmodel)
+
+    @classmethod
+    def _setup_imap(cls, theta_pars, datacube, pars):
+        '''
+        theta_pars: dict
+            A dict of the sampled mcmc params for both the velocity
+            map and the tranformation matrices
+        pars: dict
+            A dict of anything else needed to compute the posterior
+        model_name: str
+            The model name to use when constructing the velocity map
+        '''
+
+        imap_pars = pars['intensity'].copy()
+        imap_type = imap_pars['type']
+        del imap_pars['type']
+
+        return intensity.build_intensity_map(imap_type, datacube, imap_pars)
+
+    def _construct_model_datacube(self, shape, lambdas, v_array, i_array):
+        '''
+        Create the model datacube from model slices, using the evaluated
+        velocity and intensity maps, SED, etc.
+
+        shape: tuple
+            A tuple of format (Nspec, Nx, Ny)
+        lambdas: list of tuples
+            A list of (lambda_b, lambda_r) tuples for each datacube slice
+        v_array: np.array (2D)
+            The vmap evaluated at image pixel positions for sampled pars.
+            (Must be normalzied)
+        i_array: np.array (2D)
+            The imap evaluated at image pixel positions for sampled pars
+        '''
+
+        Nspec, Nx, Ny = shape
+
+        data = np.zeros(shape)
+
+        sed_array = self._setup_sed(self.meta)
+
+        for i in range(Nspec):
+            zfactor = 1. / (1 + v_array)
+
+            obs_array = self._compute_slice_model(
+                lambdas[i], sed_array, zfactor, i_array
+            )
+
+            # NB: here you could do something fancier, such as a
+            # wavelength-dependent PSF
+            # obs_im = gs.Image(obs_array, scale=pars['pix_scale'])
+            # obs_im = ...
+
+            data[i,:,:] = obs_array
+
+        pix_scale = self.meta['pix_scale']
+        bandpasses = self.meta['bandpasses']
+        model_datacube = DataCube(
+            data=data, bandpasses=bandpasses, pix_scale=pix_scale
+        )
+
+        return model_datacube
+
+    @classmethod
+    def _compute_slice_model(cls, lambdas, sed, zfactor, imap):
+        '''
+        Compute datacube slice given lambda range, sed, redshift factor
+        per pixel, and the intemsity map
+
+        lambdas: tuple
+            The wavelength tuple (lambda_blue, lambda_red) for a
+            given slice
+        sed: np.ndarray
+            A 2D numpy array with axis=0 being the lambda values of
+            a 1D interpolation table, with axis=1 being the corresponding
+            SED values
+        zfactor: np.ndarray (2D)
+            A 2D numpy array corresponding to the (normalized by c) velocity
+            map at each pixel
+        imap: np.ndarray (2D)
+            A 2D numpy array corresponding to the source intensity map
+            at the emission line
+        '''
+
+        lblue, lred = lambdas[0], lambdas[1]
+
+        # Get mean SED vlaue in slice range
+        # NOTE: We do it this way as numba won't allow
+        #       interp1d objects
+        sed_b = cls._interp1d(sed, lblue*zfactor)
+        sed_r = cls._interp1d(sed, lred*zfactor)
+
+        # Numba won't let us use np.mean w/ axis=0
+        mean_sed = (sed_b + sed_r) / 2.
+        int_sed = (lred - lblue) * mean_sed
+        model = imap * int_sed
+
+        return model
+
+    @classmethod
+    def _setup_sed(cls, meta):
+        '''
+        numba can't handle most interpolators, so create
+        a numpy one
+        '''
+
+        sed = meta['sed']
+
+        return np.array([sed.x, sed.y])
+
+    @classmethod
+    def _interp1d(cls, table, values, kind='linear'):
+        '''
+        Interpolate table(value)
+
+        table: np.ndarray
+            A 2D numpy array with axis=0 being the x-values and
+            axis=1 being the function evaluated at x
+        values: np.array
+            The values to interpolate the table on
+        '''
+
+        if kind == 'linear':
+            # just use numpy linear interpolation, as it works with numba
+            interp = np.interp(values, table[0], table[1])
+        else:
+            raise ValueError('Non-linear interpolations not yet implemented!')
+
+        return interp
+
+    def _setup_inv_cov_matrix(self):
+        '''
+        Build covariance matrix for slice images
+
+        pars: dict
+            dictionary containing parameters needed to build cov matrix
+
+        # TODO: For now, a single cov matrix for each slice. However, 
+            this could be generalized to a list of cov matrices
+        '''
+
+        Nx, Ny = self.pars['Nx'], self.pars['Ny']
+        Npix = Nx*Ny
+
+        # TODO: For now, treating pixel covariance as diagonal
+        #       and uniform for a given slice
+        sigma = self.pars['cov_sigma']
+
+        # full matrix, but very inefficient for a diagonal
+        # cov matrix
+        # inv_cov = (1./sigma)**2 * np.identity(Npix)
+
+        # uses scipy sparse matrices
+        inv_cov = (1./sigma)**2 * identity(Npix)
+
+        return inv_cov
+
 
 def _setup_test_sed(pars):
     '''
@@ -634,7 +1044,8 @@ def _setup_test_datacube(shape, lambdas, bandpasses, sed, true_pars, pars):
                 print('WARNING: Using basis for true image as test')
                 ps = pars['pix_scale']
                 dc = DataCube(
-                    shape=(1,Nx,Ny), bandpasses=[bandpasses[0]], data=true_im, pix_scale=ps
+                    shape=(1,Nx,Ny), bandpasses=[bandpasses[0]], 
+                    data=true_im, pix_scale=ps
                     )
 
                 basis_type = pars['intensity']['basis_type']
@@ -739,7 +1150,8 @@ def setup_test_pars(nx, ny):
             'theta_int': priors.UniformPrior(0., np.pi),
             'sini': priors.UniformPrior(0., 1.),
             'v0': priors.UniformPrior(0, 20),
-            'vcirc': priors.GaussPrior(200, 20, zero_boundary='positive'),# clip_sigmas=2),
+            'vcirc': priors.GaussPrior(200, 20, 
+                    zero_boundary='positive'),# clip_sigmas=2),
             'rscale': priors.UniformPrior(0, 10),
         },
         'intensity': {

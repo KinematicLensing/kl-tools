@@ -124,9 +124,47 @@ class MetaPars(object):
     Class that defines structure for the general parameters
     used in MCMC sampling for a given experiment, modeling
     choices, etc.
+
+    Some essential fields are:
+    priors:
+        g1:
+        g2:
+        theta_int:
+        sini:
+        v0:
+        vcirc:
+        rscale:
+    model_dimension:
+        Nx:
+        Ny:
+        scale:
+        lambda_range:
+        lambda_res:
+    intensity:
+        type:
+        hlr:
+    velocity:
+        v_unit:
+        r_unit:
+    sed:
+        template:
+        wave_type:
+        flux_type:
+        z:
+        wave_range:
+        obs_cont_norm:
+        lines:
+        line_sigma_int:
+    observations:
+        number_of_observations:
+        obs_1:
+        obs_2:
+        ...
+
     '''
 
-    _req_fields = ['intensity', 'psf', 'sed']
+    _req_fields = ['priors', 'model_dimension', 'intensity', 'velocity',
+                    'sed', 'observations']
 
     def __init__(self, pars):
         '''
@@ -150,7 +188,7 @@ class MetaPars(object):
 
         for key in cls._req_fields:
             if key not in pars:
-                return KeyError(f'{key} is a required field ' +\
+                raise KeyError(f'{key} is a required field ' +\
                                 'in the parameter list!')
 
         return
