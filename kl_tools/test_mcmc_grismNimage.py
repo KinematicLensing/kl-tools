@@ -42,13 +42,13 @@ def log_likelihood(theta, pars, dvs, covmats):
     for i,key in enumerate(theta_pars_keys):
         theta_pars[key] = theta[i]
     m = Mock(theta_pars, pars)
-    obs_data, covmats = m.getExposure()
+    obs_data, skip = m.getExposure()
     # calculate chi2
-    diff = [dv.array-mv.array for dv,mv in zip(dvs, obs_data)]
+    diff = [dv-mv.array for dv,mv in zip(dvs, obs_data)]
     chi2 = 0
     dof = 0
     for _diff, cov in zip(diff, covmats):
-        noise_average = np.std(cov.array)
+        noise_average = np.std(cov)
         chi2 += np.sum( (_diff/noise_average)**2 )
         dof += _diff.flatten().shape[0]
     return -0.5*chi2 + log_prior(theta, pars)
@@ -121,7 +121,7 @@ pars = {
          'diameter':240,# cm
          'exp_time':600.,# seconds
          'gain':1.,
-         'noise':{'type':'ccd','sky_level':0.65*1.2,'read_noise':8.5},
+         #'noise':{'type':'ccd','sky_level':0.65*1.2,'read_noise':8.5},
          },
         # Roman WFI/GRISM observation, roll angle 2
         {'inst_name':'Roman/WFI',
@@ -138,7 +138,7 @@ pars = {
          'diameter':240,# cm
          'exp_time':600.,# seconds
          'gain':1.,
-         'noise':{'type':'ccd','sky_level':0.65*1.2,'read_noise':8.5},
+         #'noise':{'type':'ccd','sky_level':0.65*1.2,'read_noise':8.5},
          },
         # Roman WFI/Photometry image observation, H band
         {'inst_name':'Roman/WFI',
@@ -152,61 +152,72 @@ pars = {
          'diameter':240,# cm
          'exp_time':600.,# seconds
          'gain':1.,
-         'noise':{'type':'ccd','sky_level':0.65*1.2,'read_noise':8.5},
+         #'noise':{'type':'ccd','sky_level':0.65*1.2,'read_noise':8.5},
          },
     ],
     'use_numba': False,
 }
 
-start = time.time()
-
-m = Mock(theta_pars, pars)
-obs_data, covmats = m.getExposure()
-
-
-theta_pars = {'g1':0.0, 'g2':0.0, 'theta_int': 0., 'sini':0.5,'v0':0,'vcirc':200,'rscale':0.5}
-theta_test = [0., 0., 0., 0.5, 0., 200., 0.5]
-loglike = log_likelihood(theta_test, pars, obs_data, covmats)
-logprior = log_prior(theta_test, pars)
-print(loglike, logprior)
-
-end = time.time()
-serial_time = end - start
-print("Serial took {0:.1f} seconds [1 evaluation]".format(serial_time))
-
-theta_test = [0., 0., 0., 0.5, 0., 200., 0.5]
-balls = [0.1, 0.1, 0.1, 0.05, 5, 10, 0.05, ]
-
-ndim, nwalkers = 7, 35
-p0 = np.zeros((nwalkers, ndim))
-for i in range(nwalkers):
-    for j in range(ndim):
-        p0[i,j] = theta_test[j] + np.random.normal(0.0, balls[j])
-print("start sampling")
-
-pool = MPIPool()
-sampler = emcee.EnsembleSampler(nwalkers, ndim, log_likelihood, args=[pars, obs_data, covmats], pool=pool)
-#state = sampler.run_mcmc(p0, 100, progress=True)
-#sampler.reset()
-start = time.time()
-
-f = open("test_chain_grism.dat", 'w')
-if f:
-    print("Writing output file...")
+### Load data vector and covariance matrix
+if(False):
+	start = time.time()
+	# the data vector has noise
+	pars_noise = pars.copy()
+	for i in range(3):
+		pars_noise['observations'][i]['noise'] = {'type':'ccd','sky_level':0.65*1.2,'read_noise':8.5}
+	m = Mock(theta_pars, pars_noise)
+	obs_data, covmats = m.getExposure()
+	for i in range(3):
+		np.save("datavector_%d"%(i+1), obs_data[i].array)
+		np.save("covmat_%d"%(i+1), covmats[i].array)
+	end = time.time()
+	serial_time = end - start
+	print("Serial took {0:.1f} seconds [1 evaluation]".format(serial_time))
+### 
 else:
-    print("Fail to open %s"%filename)
-#write header here
-f.write('# ' + '    '.join(theta_pars_keys)+" log_like\n")
+	obs_data = [np.load("datavector_%d.npy"%(i+1)) for i in range(3)]
+	covmats = [np.load("covmat_%d.npy"%(i+1)) for i in range(3)]
 
-for (p, loglike, state) in sampler.sample(p0,iterations=1000):
-    for row,logl in zip(p,loglike):
-        p_text = '  '.join(str(r) for r in row)
-        f.write('%s %e\n' % (p_text,logl))
-    f.flush()
-f.close()
+	theta_pars = {'g1':0.0, 'g2':0.0, 'theta_int': 0., 'sini':0.5,'v0':0,'vcirc':200,'rscale':0.5}
+	theta_test = [0., 0., 0., 0.5, 0., 200., 0.5]
 
-#sampler.run_mcmc(state, 10000, progress=True)
-end = time.time()
-serial_time = end - start
-print("Serial took {0:.1f} seconds".format(serial_time))
-pool.close()
+	loglike = log_likelihood(theta_test, pars, obs_data, covmats)
+	logprior = log_prior(theta_test, pars)
+	print(loglike, logprior)
+
+	theta_test = [0., 0., 0., 0.5, 0., 200., 0.5]
+	balls = [0.1, 0.1, 0.1, 0.05, 5, 10, 0.05, ]
+
+	ndim, nwalkers = 7, 35
+	p0 = np.zeros((nwalkers, ndim))
+	for i in range(nwalkers):
+	    for j in range(ndim):
+	        p0[i,j] = theta_test[j] + np.random.normal(0.0, balls[j])
+	print("start sampling")
+
+	pool = MPIPool()
+	sampler = emcee.EnsembleSampler(nwalkers, ndim, log_likelihood, args=[pars, obs_data, covmats], pool=pool)
+	#state = sampler.run_mcmc(p0, 100, progress=True)
+	#sampler.reset()
+	start = time.time()
+
+	f = open("test_chain_grism.dat", 'w')
+	if f:
+	    print("Writing output file...")
+	else:
+	    print("Fail to open %s"%filename)
+	#write header here
+	f.write('# ' + '    '.join(theta_pars_keys)+" log_like\n")
+
+	for (p, loglike, state) in sampler.sample(p0,iterations=1000):
+	    for row,logl in zip(p,loglike):
+	        p_text = '  '.join(str(r) for r in row)
+	        f.write('%s %e\n' % (p_text,logl))
+	    f.flush()
+	f.close()
+
+	#sampler.run_mcmc(state, 10000, progress=True)
+	end = time.time()
+	serial_time = end - start
+	print("Serial took {0:.1f} seconds".format(serial_time))
+	pool.close()
