@@ -113,6 +113,9 @@ class SampledPars(object):
 
         return theta
 
+    def keys(self):
+        return self.pars_order.keys()
+
     def __repr__(self):
         return str(self.pars_order)
 
@@ -144,6 +147,7 @@ class MetaPars(object):
         type:
         hlr:
     velocity:
+        model_name: default/centered
         v_unit:
         r_unit:
     sed:
@@ -218,6 +222,12 @@ class MetaPars(object):
 
     def values(self):
         return self.pars.values()
+
+    def pop(self, key):
+        return self.pars.pop(key)
+
+    def get(self, key, default=None):
+        return self.pars.get(key, default)
 
 # order of sampled mcmc parameters
 # NOTE: This won't be accessible if we use numba

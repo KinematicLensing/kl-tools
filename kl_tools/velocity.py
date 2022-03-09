@@ -14,7 +14,7 @@ import utils
 from transformation import TransformableImage
 import transformation as transform
 import numba_transformation as numba_transform
-from parameters import pars2theta
+from parameters import SampledPars, Pars, MetaPars
 
 import pudb
 
@@ -35,52 +35,49 @@ class VelocityModel(object):
     _model_params = ['v0', 'vcirc', 'rscale', 'sini',
                      'theta_int', 'g1', 'g2', 'r_unit', 'v_unit']
 
-    def __init__(self, model_pars):
-        if not isinstance(model_pars, dict):
-            t = type(model_pars)
-            raise TypeError(f'model_pars must be a dict, not a {t}!')
+    def __init__(self, sampled_pars, meta_pars):
+        if not isinstance(sampled_pars, SampledPars):
+            t = type(sampled_pars)
+            raise TypeError(f'sampled_pars must be a SampledPars, not a {t}!')
+        if not isinstance(meta_pars, dict):
+            t = type(meta_pars)
+            raise TypeError(f'meta_pars must be a dict, not a {t}!')
 
-        self.pars = model_pars
+        self.sp = sampled_pars
+        self.mp = meta_pars
 
         self._check_model_pars()
-
-        # Needed if using numba for transformations
-        self._build_pars_array()
 
         return
 
     def _check_model_pars(self):
         mname = self.name
-
+        _mp = []
         # Make sure there are no undefined pars
-        for name, val in self.pars.items():
+        for name in self.sp.keys():
+            if name not in self._model_params:
+                raise AttributeError(f'{name} is not a valid model ' +\
+                                     f'parameter for {mname} velocity model!')
+            _mp.append(name)
+        for name, val in self.mp.items():
             if val is None:
                 raise ValueError(f'{param} must be set!')
             if name not in self._model_params:
                 raise AttributeError(f'{name} is not a valid model ' +\
                                      f'parameter for {mname} velocity model!')
-
+            _mp.append(name)
         # Make sure all req pars are present
         for par in self._model_params:
-            if par not in self.pars:
+            if par not in _mp:
                 raise AttributeError(f'{par} must be in passed parameters ' +\
                                      f'to instantiate {mname} velocity model!')
 
         # Make sure units are astropy.unit objects
-        for u in [self.pars['r_unit'], self.pars['v_unit']]:
+        for u in [self.mp['r_unit'], self.mp['v_unit']]:
             if (not isinstance(u, units.Unit)) and \
                (not isinstance(u, units.CompositeUnit)) and \
                (not isinstance(u, units.IrreducibleUnit)):
                 raise TypeError('unit params must be an astropy unit class!')
-
-        return
-
-    def _build_pars_array(self):
-        '''
-        Numba requires a pars array instead of a more flexible dict
-        '''
-
-        self.pars_arr = pars2theta(self.pars)
 
         return
 
@@ -110,23 +107,24 @@ class VelocityMap(TransformableImage):
     obs:  Observed image plane. Sheared version of source plane
     '''
 
-    def __init__(self, model_name, model_pars):
+    def __init__(self, model_name, sampled_pars, meta_pars):
         '''
         model_name: The name of the velocity to model.
-        model_pars: A dict with key:val pairs for the model parameters.
-                    Must be a registered velocity model.
+        sampled_pars: A SampledPars with key:index pairs for the sampled model
+            parameters. Must be a registered velocity model.
+        meta_pars: A dict with key:val pairs for the unsampled model parameters
         '''
 
 
         self.model_name = model_name
-        self.model = build_model(model_name, model_pars)
+        self.model = build_model(model_name, sampled_pars, meta_pars)
 
-        transform_pars = self.model.get_transform_pars()
-        super(VelocityMap, self).__init__(transform_pars)
+        #transform_pars = self.model.get_transform_pars()
+        super(VelocityMap, self).__init__()
 
         return
 
-    def __call__(self, plane, x, y, speed=False, normalized=False,
+    def __call__(self, pars, plane, x, y, speed=False, normalized=False,
                  use_numba=False):
         '''
         Evaluate the velocity map at position (x,y) in the given plane. Note
@@ -139,21 +137,28 @@ class VelocityMap(TransformableImage):
         use_numba: bool
             Set to True to use numba versions of transformations
         '''
-
-        super(VelocityMap, self).__call__(
-            plane, x, y, use_numba=use_numba
-            )
+        # parameters consistency check
+        if not isinstance(pars, (dict, list, np.ndarray)):
+            t = type(pars)
+            raise TypeError(f'pars must be a dict, list or numpy.ndarray,'+\
+                f' not {t}!')
+        if use_numba and isinstance(pars, dict):
+            pars = self.model.sp.pars2theta(pars)
+        elif (not use_numba) and (isinstance(pars, (list, np.ndarray))):
+            pars = self.model.sp.theta2pars(pars)
+        super(VelocityMap, self).__call__(plane, x, y, use_numba=use_numba)
 
         if normalized is True:
-            norm = 1. / const.c.to(self.model.pars['v_unit']).value
+            norm = 1. / const.c.to(self.model.mp['v_unit']).value
         else:
             norm = 1.
 
         return norm * self._eval_map_in_plane(
-            plane, x, y, speed=speed, use_numba=use_numba
+            pars, plane, x, y, speed=speed, use_numba=use_numba
             )
 
-    def _eval_map_in_plane(self, plane, x, y, speed=False, use_numba=False):
+    def _eval_map_in_plane(self, pars, plane, x, y, 
+                            speed=False, use_numba=False):
         '''
         We use static methods defined in transformation.py
         to speed up these very common function calls
@@ -168,12 +173,6 @@ class VelocityMap(TransformableImage):
         use_numba: bool
             Set to True to use numba versions of transformations
         '''
-
-        # Need to use array for numba
-        if use_numba is True:
-            pars = self.model.pars_arr
-        else:
-            pars = self.model.pars
 
         func = self._get_plane_eval_func(plane, use_numba=use_numba)
 
@@ -266,7 +265,7 @@ class VelocityMap(TransformableImage):
         if plane not in self._planes:
             raise ValueError(f'{plane} not a valid image plane to plot!')
 
-        pars = self.model.pars
+        pars = self.model.mp
 
         if rmax is None:
             rmax = 5. * pars['rscale']
@@ -357,7 +356,7 @@ class VelocityMap(TransformableImage):
             outfile = plot_kwargs['outfile']
             del plot_kwargs['outfile']
 
-        pars = self.model.pars
+        pars = self.model.mp
 
         if 'rmax' in plot_kwargs:
             rmax = plot_kwargs['rmax']
@@ -411,7 +410,7 @@ class VelocityMap(TransformableImage):
     def plot_map_transforms(self, size=(9,8), outfile=None, show=True, close=True,
                             speed=False, center=True, rmax=None):
 
-        pars = self.model.pars
+        pars = self.model.mp
 
         runit = pars['r_unit']
         vunit = pars['v_unit']
@@ -479,12 +478,12 @@ MODEL_TYPES = {
     'centered': VelocityModel,
     }
 
-def build_model(name, pars, logger=None):
+def build_model(name, sampled_pars, meta_pars, logger=None):
     name = name.lower()
 
     if name in MODEL_TYPES.keys():
         # User-defined input construction
-        model = MODEL_TYPES[name](pars)
+        model = MODEL_TYPES[name](sampled_pars, meta_pars)
     else:
         raise ValueError(f'{name} is not a registered velocity model!')
 

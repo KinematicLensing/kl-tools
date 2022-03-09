@@ -30,15 +30,15 @@ class DataVector(object):
     '''
 
     @abstractmethod
-    def stack(self, theory_cube=None):
+    def stack(self, theory_data=None):
         '''
         Each datavector must have a method that defines how to stack it
         into a single (Nx,Ny) image for basis function fitting
         '''
         pass
 
-class GrismGenerator(DataVector):
-    ''' Light wrapper around 3D theory model cube, to generate observation data
+class ImageGenerator(DataVector):
+    ''' Light wrapper around 3D theory model cube, to generate grism data
 
     Note: 
     - This class object does not save 3D theory model cube. It saves 
@@ -47,6 +47,175 @@ class GrismGenerator(DataVector):
     - The current API design assumes parameters related with instrument and
     observations are not being sampled
     '''
+    TYPE = 'photometry'
+    def __init__(self, pars):
+        ''' Initialize observation-related properties, including:
+        - PSF model
+        - bandpass
+        - etc.
+
+        pars: ``Pars`` object
+            the parameters not sampled during MCMC. These parameters will be
+            used to initialize the generator
+        Let's first write the routine then write the initialization
+        '''
+        # init theory cube & observed data dimensions
+        self.Nx_theory = pars.meta['model_dimension']['Nx']
+        self.Ny_theory = pars.meta['model_dimension']['Ny']
+        self.scale = pars.meta['model_dimension']['scale']
+        self.Nx = pars.meta['observations']['Nx']
+        self.Ny = pars.meta['observations']['Ny']
+        self.pix_scale = pars.meta['observations']['pixel_scale']
+        
+        # init bandpass
+        self.bandpass_file = pars.meta['observations']['bandpass']
+        self.bandpass = gs.Bandpass(self.bandpass_file, wave_type='nm')
+
+        # init psf
+        # Note: don't consider chromatic PSF for broadband images so far.
+        self.psf_type=pars.meta['observations'].get('psf_type', 'none').lower()
+        self.psf_args=pars.meta['observations'].get('psf_kwargs', {})
+        self.hasPSF = (self.psf_type != 'none')
+
+        # init noise model
+        self.noise_pars = pars.meta['observations'].get('noise', {})
+        self.noise_type = self.noise_pars.get('type', 'none').lower()
+
+        # others
+        self.diameter = pars.meta['observations']['diameter']
+        self.area = np.pi * (self.diameter/2.)**2
+        self.inst_name = pars.meta['observations']['inst_name']
+        self.gain = pars.meta['observations']['gain']
+        self.exp_time = pars.meta['observations']['exp_time']
+        self.offset = pars.meta['observations'].get('offset', 0.0)
+        print("\n[ImageGenerator] Init:")
+        print("--- Instrument name = {}".format(self.inst_name))
+        print("--- Aperture diameter = {:.2f} cm".format(self.diameter))
+        print("--- Aperture area = {:.2f} cm2".format(self.area))
+        print("--- Detector gain = {:.2f}".format(self.gain))
+        print("--- Exposure time = {:.2f} seconds".format(self.exp_time))
+        print("--- Noise type = {}".format(self.noise_type))
+        print("--- PSF type = {}".format(self.psf_type))
+        print("--- Bandpass file = {}".format(self.bandpass_file))
+        print("--- Theory slice dimension = ({:d}, {:d})".format(
+            self.Ny_theory, self.Nx_theory))
+        print("--- Theory slice scale = {:.2f}".format(self.scale))
+        print("--- Observed slice dimension = ({:d}, {:d})".format(
+            self.Ny, self.Nx))
+        print("--- Observed slice pixel scale = {:.2f}".format(self.pix_scale))
+
+        return
+
+    def stack(self, theory_data, lambdas):
+        ''' Generate simulated grism image out of theory 3d model cube
+
+        Inputs:
+        =======
+        theory_data: IntensityMap object
+            the 2d intensity distribution
+        lambdas: 1d (Nspec) list of two-elements tuple
+            the blue and red limits of each theory cube slice
+
+        Outputs:
+        ========
+        data: 2d (Ny, Nx) numpy.ndarray
+            the 2d stacked image
+        noise: 2d (Ny, Nx) numpy.ndarray
+            the 2d image noise
+        '''
+        #if not isinstance(theory_data, gs.GSObject):
+        #    t = type(theory_data)
+        #    raise TypeError(f'theory_data must be galsim.GSObject object,'+\
+        #        f' not {t}!')
+
+        _gal_chromatic = theory_data
+        # convolve with PSF
+        if self.hasPSF:
+            psf = self._build_PSF_model(
+                lam=self.bandpass.calculateEffectiveWavelength()
+                )
+            _gal_chromatic = gs.Convolve([_gal_chromatic, psf])
+        photometry_img = _gal_chromatic.drawImage(
+                                nx=self.Nx, ny=self.Ny, 
+                                scale=self.pix_scale, method='auto',
+                                area=self.area, exptime=self.exp_time,
+                                gain=self.gain,
+                                bandpass=self.bandpass)
+        # apply noise
+        if self.noise_type == 'none':
+            return photometry_img.array, None
+        else:
+            noise = self._getNoise()
+            photometry_img_withNoise = photometry_img.copy()
+            photometry_img_withNoise.addNoise(noise)
+            noise_img = photometry_img_withNoise - photometry_img
+            return photometry_img_withNoise.array, noise_img.array
+
+    def _build_PSF_model(self, **kwargs):
+        ''' Generate PSF model
+
+        Inputs:
+        =======
+        kwargs: keyword arguments for building psf model
+            - lam: wavelength in nm
+            - scale: pixel scale
+
+        Outputs:
+        ========
+        psf_model: GalSim PSF object
+
+        '''
+        if self.psf_type is not None:
+            if self.psf_type == 'airy':
+                lam = kwargs.get('lam', 1000) # nm
+                scale = kwargs.get('scale_unit', gs.arcsec)
+                return gs.Airy(lam=lam, diam=self.diameter/100,
+                                scale_unit=scale)
+            elif self.psf_type == 'moffat':
+                beta = self.psf_args.get('beta', 2.5)
+                fwhm = self.psf_args.get('fwhm', 0.5)
+                return gs.Moffat(beta=beta, fwhm=fwhm)
+            else:
+                raise ValueError(f'{psf_type} has not been implemented yet!')
+        else:
+            return None
+
+    def _getNoise(self):
+        ''' Generate image noise based on parameter settings
+
+        Outputs:
+        ========
+        noise: GalSim Noise object
+        '''
+        random_seed = self.noise_pars.get('random_seed', int(time()))
+        rng = gs.BaseDeviate(random_seed+1)
+
+        if self.noise_type == 'ccd':
+            sky_level = self.noise_pars.get('sky_level', 0.65*1.2)
+            read_noise = self.noise_pars.get('read_noise', 0.85)
+            noise = gs.CCDNoise(rng=rng, gain=self.gain, 
+                                read_noise=read_noise, sky_level=sky_level)
+        elif self.noise_type == 'gauss':
+            sigma = self.noise_pars.get('sigma', 1.0)
+            noise = gs.GaussianNoise(rng=rng, sigma=sigma)
+        elif self.noise_type == 'poisson':
+            sky_level = self.noise_pars.get('sky_level', 0.65*1.2)
+            noise = gs.PoissonNoise(rng=rng, sky_level=sky_level)
+        else:
+            raise ValueError(f'{self.noise_type} not implemented yet!')
+        return noise
+
+class GrismGenerator(DataVector):
+    ''' Light wrapper around 3D theory model cube, to generate grism data
+
+    Note: 
+    - This class object does not save 3D theory model cube. It saves 
+    properties related with specific instrument and observations (e.g. PSF, 
+    bandpasses, etc.), and provide a realization of the ``stack`` interface
+    - The current API design assumes parameters related with instrument and
+    observations are not being sampled
+    '''
+    TYPE = 'grism'
     _CHROMATIC_PSF_ = ('airy', 'kolmogorov', 'vonkarman', 'opticalpsf')
     def __init__(self, pars):
         ''' Initialize observation-related properties, including:
@@ -74,8 +243,9 @@ class GrismGenerator(DataVector):
         # init psf
         self.psf_type=pars.meta['observations'].get('psf_type', 'none').lower()
         self.psf_args=pars.meta['observations'].get('psf_kwargs', {})
-        self.hasPSF = (self.psf_type == 'none')
-        self.hasChromaticPSF = (self.psf_type in _CHROMATIC_PSF_)
+        self.hasPSF = (self.psf_type != 'none')
+        self.hasChromaticPSF = (self.psf_type in 
+            GrismGenerator._CHROMATIC_PSF_)
 
         # init noise model
         self.noise_pars = pars.meta['observations'].get('noise', {})
@@ -92,8 +262,8 @@ class GrismGenerator(DataVector):
         self.inst_name = pars.meta['observations']['inst_name']
         self.gain = pars.meta['observations']['gain']
         self.exp_time = pars.meta['observations']['exp_time']
-        self.offset = pars.meta['observations']['offset']
-        print("[GrismGenerator] Init:")
+        self.offset = pars.meta['observations'].get('offset', 0.0)
+        print("\n[GrismGenerator] Init:")
         print("--- Instrument name = {}".format(self.inst_name))
         print("--- Aperture diameter = {:.2f} cm".format(self.diameter))
         print("--- Aperture area = {:.2f} cm2".format(self.area))
@@ -110,17 +280,17 @@ class GrismGenerator(DataVector):
         print("--- Observed slice pixel scale = {:.2f}".format(self.pix_scale))
         print("--- Dispersion angle = {:.2f} deg".format(
             self.disp_ang/np.pi*180))
-        print("--- Spectral resolution = {:.2f}".format(self.R_spec))
+        print("--- Spectral resolution at 1um = {:.2f}".format(self.R_spec))
         print("--- Grism offset = {} pixels".format(self.offset))
 
         return
 
-    def stack(self, theory_cube, lambdas):
+    def stack(self, theory_data, lambdas):
         ''' Generate simulated grism image out of theory 3d model cube
 
         Inputs:
         =======
-        theory_cube: 3d (Nspec_theory, Ny_theory, Nx_theory) numpy.ndarray
+        theory_data: 3d (Nspec_theory, Ny_theory, Nx_theory) numpy.ndarray
             the 3d intensity distribution
         lambdas: 1d (Nspec) list of two-elements tuple
             the blue and red limits of each theory cube slice
@@ -132,12 +302,17 @@ class GrismGenerator(DataVector):
         noise: 2d (Ny, Nx) numpy.ndarray
             the 2d image noise
         '''
+        if not isinstance(theory_data, np.ndarray):
+            raise TypeError(f'theory_data must be numpy.ndarray object!')
+        if theory_data.shape[0] != lambdas.shape[0]:
+            raise ValueError(f'theory_data and lambdas must have the same'+\
+                ' dimension in along axis 0')
         # disperse and project the theory 3d model cube into grism image
-        _grism_list = list(map(self._disperse, theory_cube, lambdas))
+        _grism_list = list(map(self._disperse, theory_data, lambdas))
         grism_img = np.sum(_grism_list, axis=0)
         # convolve with achromatic psf, if required
         if self.hasPSF and not self.hasChromaticPSF:
-            psf = self._build_PSF_model(scale_unit=self.pix_scale)
+            psf = self._build_PSF_model()
             grism_img = gs.Convolve([grism_img, psf])
 
         # apply noise
@@ -173,7 +348,7 @@ class GrismGenerator(DataVector):
                                             red_limit=lambdas[1])
         # if we adopt chromatic PSF, convolve with PSF model here
         if self.hasPSF and self.hasChromaticPSF:
-            psf = self._build_PSF_model(lam=lambdas, scale_unit=self.scale)
+            psf = self._build_PSF_model(lam=np.mean(lambdas))
             _gal = gs.Convolve([_gal, psf]) 
         # get dispersion shift, in units of pixels
         # Note: shift = (dx, dy)
@@ -222,7 +397,7 @@ class GrismGenerator(DataVector):
         if self.psf_type is not None:
             if self.psf_type == 'airy':
                 lam = kwargs.get('lam', 1000) # nm
-                scale = kwargs.get('scale_unit', self.pix_scale)
+                scale = kwargs.get('scale_unit', gs.arcsec)
                 return gs.Airy(lam=lam, diam=self.diameter/100,
                                 scale_unit=scale)
             elif self.psf_type == 'moffat':

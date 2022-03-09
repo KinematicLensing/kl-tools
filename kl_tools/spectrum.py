@@ -49,6 +49,7 @@ class Spectrum(object):
         # intrinsic linewidth in nm
         'line_sigma_int': {'Halpha': 0.5,},
         #'line_hlr': (0.5, Unit('arcsec')),
+        'thin': -1,
     }
     # units conversion
     _h = constants.h.to('erg s').value
@@ -60,7 +61,7 @@ class Spectrum(object):
         'OIII': [496.0295, 500.8240],
     }
     
-    def __init__(self, pars, rel_err=-1):
+    def __init__(self, pars):
         '''
         Initialize SED class object with parameters dictionary
         '''
@@ -69,8 +70,8 @@ class Spectrum(object):
         continuum = self._addContinuum()
         emission = self._addEmissionLines()
         self.spectrum = continuum + emission
-        if rel_err>0:
-            self.spectrum = self.spectrum.thin(rel_err=rel_err)
+        if self.pars['thin'] > 0:
+            self.spectrum = self.spectrum.thin(rel_err=self.pars['thin'])
         
         
     def updatePars(self, pars):

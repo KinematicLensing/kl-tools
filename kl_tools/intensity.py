@@ -126,7 +126,8 @@ class InclinedExponential(IntensityMap):
     testing anyway
     '''
 
-    def __init__(self, datacube, flux=None, hlr=None):
+    def __init__(self, datacube, flux=None, hlr=None, 
+        scale=None, Nx=None, Ny=None):
         '''
         datacube: DataCube
             While this implementation will not use the datacube
@@ -137,10 +138,9 @@ class InclinedExponential(IntensityMap):
             Object half-light radius (in pixels)
         '''
 
-        nx, ny = datacube.Nx, datacube.Ny
-        super(InclinedExponential, self).__init__('inclined_exp', nx, ny)
+        super(InclinedExponential, self).__init__('inclined_exp', Nx, Ny)
 
-        pars = {'flux': flux, 'hlr': hlr}
+        pars = {'flux': flux, 'hlr': hlr, 'scale': scale}
         for name, val in pars.items():
             if val is None:
                 pars[name] = 1.
@@ -150,6 +150,7 @@ class InclinedExponential(IntensityMap):
 
         self.flux = pars['flux']
         self.hlr = pars['hlr']
+        self.scale = pars['scale']
 
         return
 
@@ -201,10 +202,12 @@ class InclinedExponential(IntensityMap):
             psf = pars['psf']
             gal = gs.Convolve([gal, psf])
 
-        pixscale = pars['pix_scale']
-        self.image = gal.drawImage(nx=self.nx, ny=self.ny, scale=pixscale).array
-
-        return self.image
+        self.image = gal.drawImage(nx=self.nx, ny=self.ny, 
+            scale=self.scale).array
+        if pars.get('return_GSObject_blob', False):
+            return self.image, gal
+        else:
+            return self.image
 
     def plot_fit(self, datacube, show=True, close=True, outfile=None,
                  size=(9,9), vmin=None, vmax=None):

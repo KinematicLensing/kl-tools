@@ -34,35 +34,23 @@ class TransformableImage(object):
     at, and any necessary transformation parameters
     '''
 
-    def __init__(self, transform_pars):
+    def __init__(self):
         '''
         transform_pars: dict
             A dictionary that defines the parameters needed
             to evaluate the plane transformations
         '''
 
-        self.transform_pars = transform_pars
+        #self.transform_pars = transform_pars
         self._planes = ['disk', 'gal', 'source', 'obs']
 
-        self._setup_transformations()
-
-        return
-
-    def _setup_transformations(self):
-        '''
-        TODO: Do we need this?
-        '''
-
-        pars = self.transform_pars
-
-        self.obs2source = _transform_obs2source(pars)
-        self.source2gal = _transform_source2gal(pars)
-        self.gal2disk = _transform_gal2disk(pars)
+        #self._setup_transformations()
 
         return
 
     def __call__(self, plane, x, y, use_numba=False):
-        '''
+        ''' Do arguments validity check
+
         plane: str
             The plane to evaluate the image in
         x: np.ndarray
