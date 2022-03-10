@@ -1,6 +1,9 @@
 import utils
-
+import yaml
 import pudb
+import os
+import priors
+from astropy.units import Unit
 
 '''
 This file defines the structure and conversions between a params dict
@@ -24,16 +27,36 @@ class Pars(object):
     sampled and meta parameters
     '''
 
-    def __init__(self, sampled_pars, meta_pars):
-        '''
+    def __init__(self, 
+        sampled_pars=None, meta_pars=None,
+        yaml_file=None):
+        ''' Initializing Pars object
+
+        Note: can either init by passing (sampled_pars, meta_pars) and 
+        yaml_file.
+
+        TODO: override yaml settings if both are provided
+
         sampled_pars: list of str's
             A list of parameter names to be sampled in the MCMC.
             Their order will be used to define pars2theta
         meta_pars: dict
             A dictionary of meta parameters and their values for
             a particular experiment and MCMC run
+        yaml_file: string
+            path to a YAML file, which records the parameter settings
         '''
-
+        flag_dict = (sampled_pars is not None) and (meta_pars is not None)
+        flag_yaml = (yaml_file is not None)
+        assert (flag_yaml != flag_dict), \
+            "Either initialize Pars object with dict or YAML file!"
+        # load parameters from yaml file
+        if flag_yaml:
+            #assert os.path.isfile(yaml_file), \
+            #    f'YAML file {yaml_file} does not exist!'
+            # interpret YAML dict
+            meta_pars, sampled_pars, self.sampled_fid = \
+                            self._interpret_yaml_file(yaml_file)
         args = {
             'sampled_pars': (sampled_pars, list),
             'meta_pars': (meta_pars, dict)
@@ -54,6 +77,56 @@ class Pars(object):
 
     def theta2pars(self, theta):
         return self.sampled.theta2pars(theta)
+
+    @classmethod
+    def _interpret_yaml_file(cls, yaml_file):
+        print("Reading parameter settings from YAML file {}".format(yaml_file))
+        with open(yaml_file, 'r') as file:
+            pars_dict = yaml.load(file, Loader=yaml.FullLoader)
+        print(pars_dict)
+        # 1. get sampled parameters and their sequence
+        Nsampled = len(pars_dict['sampled_pars'].keys())
+        print(f'{Nsampled} elements are sampled')
+        pars_priors = {}
+        fid_sampled = [0.] * Nsampled
+
+        sampled_pars_dict = {}
+        for key, val in pars_dict['sampled_pars'].items():
+            sampled_pars_dict[key] = val['order']
+        sampled_pars = [k for k,v in \
+            sorted(sampled_pars_dict.items(), key=lambda item: item[1])]
+        sampled_pars_dict = dict(zip(sampled_pars, range(len(sampled_pars))))
+
+        for key, val in pars_dict['sampled_pars'].items():
+            order = sampled_pars_dict[key]
+            fid = val['fid']
+            fid_sampled[order] = fid
+            print(f'sampled param {order+1}: {key}')
+            print(f'fiducial value = {fid}')
+            # which priors?
+            flag_flat = 'min' in val.keys() and 'max' in val.keys()
+            flag_norm = 'mean' in val.keys() and 'std' in val.keys()
+            assert flag_flat!=flag_norm, f'Either a flat prior or a Gaussian'+\
+                    f' prior should be specified for {key}!'
+            if flag_flat:
+                _min, _max = val['min'], val['max']
+                print(f'prior = priors.UniformPrior({_min}, {_max})')
+                pars_priors[key] = priors.UniformPrior(_min, _max)
+            else:
+                _mean, _std = val['mean'], val['std']
+                print(f'prior = priors.GaussPrior({_mean}, {_std})')
+                pars_priors[key] = priors.GaussPrior(_mean, _std)
+        del pars_dict['sampled_pars']
+        pars_dict['priors'] = pars_priors
+
+        # 2. interpret velocity model units Unit('km / s')
+        v_unit = Unit(pars_dict['velocity']['v_unit'])
+        r_unit = Unit(pars_dict['velocity']['r_unit'])
+        pars_dict['velocity']['v_unit'] = v_unit
+        pars_dict['velocity']['r_unit'] = r_unit
+
+        return pars_dict, sampled_pars, fid_sampled
+
 
 class SampledPars(object):
     '''

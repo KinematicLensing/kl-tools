@@ -106,7 +106,7 @@ class ImageGenerator(DataVector):
 
         return
 
-    def stack(self, theory_data, lambdas):
+    def stack(self, theory_data, lambdas, force_noise_free=False):
         ''' Generate simulated grism image out of theory 3d model cube
 
         Inputs:
@@ -142,13 +142,16 @@ class ImageGenerator(DataVector):
                                 gain=self.gain,
                                 bandpass=self.bandpass)
         # apply noise
-        if self.noise_type == 'none':
+        if force_noise_free or self.noise_type == 'none':
+            assert (photometry_img.array is not None), "Null photometry data"
             return photometry_img.array, None
         else:
             noise = self._getNoise()
             photometry_img_withNoise = photometry_img.copy()
             photometry_img_withNoise.addNoise(noise)
             noise_img = photometry_img_withNoise - photometry_img
+            assert (photometry_img_withNoise.array is not None), \
+                    "Null photometry data"
             return photometry_img_withNoise.array, noise_img.array
 
     def _build_PSF_model(self, **kwargs):
@@ -285,7 +288,7 @@ class GrismGenerator(DataVector):
 
         return
 
-    def stack(self, theory_data, lambdas):
+    def stack(self, theory_data, lambdas, force_noise_free = False):
         ''' Generate simulated grism image out of theory 3d model cube
 
         Inputs:
@@ -316,13 +319,15 @@ class GrismGenerator(DataVector):
             grism_img = gs.Convolve([grism_img, psf])
 
         # apply noise
-        if self.noise_type == 'none':
+        if force_noise_free or (self.noise_type == 'none'):
+            assert (grism_img.array is not None), "Null grism data"
             return grism_img.array, None
         else:
             noise = self._getNoise()
             grism_img_withNoise = grism_img.copy()
             grism_img_withNoise.addNoise(noise)
             noise_img = grism_img_withNoise - grism_img
+            assert (grism_img_withNoise.array is not None), "Null grism data"
             return grism_img_withNoise.array, noise_img.array
 
     def _disperse(self, theory_slice, lambdas):
@@ -372,13 +377,17 @@ class GrismGenerator(DataVector):
             x = xcen + (lam * dx/dlam + offset) * cos(theta),
             y = ycen + (lam * dx/dlam + offset) * sin(theta)
         '''
-        dxdlam = self.R_spec/500.0
-        disp_direction = np.array([np.cos(self.disp_ang), 
+        self.dxdlam = self.R_spec/500.0
+        self.disp_vec = np.array([np.cos(self.disp_ang), 
                                    np.sin(self.disp_ang)])
-        self.dispersion_relation = \
-            lambda x: (x * dxdlam + self.offset)*disp_direction
+        # lambda expression is not pickleble
+        #self.dispersion_relation = \
+        #    lambda x: (x * dxdlam + self.offset)*disp_direction
 
         return
+
+    def dispersion_relation(self, x):
+        return (x * self.dxdlam + self.offset)*self.disp_vec
 
     def _build_PSF_model(self, **kwargs):
         ''' Generate PSF model

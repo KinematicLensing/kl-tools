@@ -57,7 +57,7 @@ class DataSimulator():
         pars: `Pars` object
             parameters for initialization  
         '''
-
+        print("Initializing DataSimulator...")
         utils.check_type(pars, 'pars', Pars)
         self.pars = copy.deepcopy(pars)
         
@@ -111,7 +111,7 @@ class DataSimulator():
         self._setup_vmap()
         self._setup_SED()
         self.use_numba = self.pars.meta.get('use_numba', False)
-
+        print("DataSimulator initialized!")
         return
 
     def _setup_vmap(self):
@@ -170,11 +170,15 @@ class DataSimulator():
         '''
         # evaluate intensity profile, velocity distribution and SED
         # currently do not add SF knots and PSF
-        self.imap_img, self.gal = self.imap.render(self.pars.theta2pars(theta), 
-            self.datacube, {'return_GSObject_blob': True}, redo=True)
+        self.imap_img, self.gal = self.imap.render(
+            self.pars.theta2pars(theta), self.datacube, 
+            {'return_GSObject_blob': True}, redo=True
+            )
         # velocity map for Doppler shift calculation
-        self.vmap_img = self.vmap(theta, 'obs', self.X, self.Y, 
-            normalized=True, use_numba=self.use_numba)
+        self.vmap_img = self.vmap(
+            theta, 'obs', self.X, self.Y, 
+            normalized=True, use_numba=self.use_numba
+            )
         # velocity map for display and debug
         #V = self.vmap('obs', theta, X, Y, use_numba=self.use_numba)
 
@@ -188,16 +192,25 @@ class DataSimulator():
 
         return
 
-    def evaluateSimulatedData(self, theta):
+    def evaluateSimulatedData(self, theta, force_noise_free = False):
         datavector = []
         covariance = []
         self.evaluateTheoryModel(theta)
+        assert (self._data.shape == self.shape), "Invalid _data shape!"
+
         for _ds in self.data_generators:
             if _ds.TYPE == 'grism':
-                _img, _cov = _ds.stack(self._data, self.lambdas)
+                _img, _cov = _ds.stack(
+                    self._data, self.lambdas, force_noise_free
+                    )
             elif _ds.TYPE == 'photometry':
-                _img, _cov = _ds.stack(self.gal*self.sed.spectrum, 
-                    self.lambdas)
+                assert (self.gal is not None), "galaxy model missing!"
+                _gal_chromatic = self.gal * self.sed.spectrum
+                _img, _cov = _ds.stack(
+                    _gal_chromatic, self.lambdas, force_noise_free
+                    )
+            else:
+                raise TypeError(f'{_ds.TYPE} is not supported now!')
             datavector.append(_img)
             covariance.append(_cov)
         return datavector, covariance

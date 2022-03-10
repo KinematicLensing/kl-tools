@@ -92,12 +92,13 @@ class MCMCRunner(object):
         each prior, centered at the max of the prior
         '''
 
-        if 'priors' in self.kwargs['pars']:
+        #if 'priors' in self.kwargs['pars']:
+        if 'priors' in self.pfunc.log_likelihood.meta.keys():
             # use peak of priors for initialization
             self.start = np.zeros((self.nwalkers, self.ndim))
 
             for name, indx in self.pars_order.items():
-                prior = self.kwargs['pars']['priors'][name]
+                prior = self.pfunc.log_likelihood.meta['priors'][name]
                 peak, cen = prior.peak, prior.cen
 
                 base = peak if peak is not None else cen
@@ -431,9 +432,9 @@ class KLensZeusRunner(ZeusRunner):
         '''
 
         super(KLensZeusRunner, self).__init__(
-            nwalkers, ndim, pfunc, args=[datacube], kwargs={
-                'pars': pars.meta.pars
-                }
+            nwalkers, ndim, pfunc, 
+            #args=[datacube], 
+            #kwargs={'pars': pars.meta.pars}
             )
 
         self.datacube = datacube
@@ -615,7 +616,8 @@ class KLensEmceeRunner(KLensZeusRunner):
     def _initialize_sampler(self, pool=None):
         sampler = emcee.EnsembleSampler(
             self.nwalkers, self.ndim, self.pfunc,
-            args=self.args, kwargs=self.kwargs, pool=pool
+            #args=self.args, kwargs=self.kwargs, 
+            pool=pool
             )
 
         return sampler
