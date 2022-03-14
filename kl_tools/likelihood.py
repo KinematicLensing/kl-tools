@@ -711,8 +711,7 @@ class LogLikelihood_Roman(LogBase):
             map(self._log_likelihood, 
                 modelvector, self.datavector, self.invcov)
             )
-
-        return (-0.5 * log_det) + np.sum(log_like)
+        return np.sum(log_like) # + (-0.5 * log_det)
 
     @classmethod
     def _log_likelihood(cls, modelvector, datavector, inv_cov):

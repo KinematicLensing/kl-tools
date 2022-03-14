@@ -271,6 +271,16 @@ def main(args, pool):
     return 0
 
 if __name__ == '__main__':
+    '''
+    To run with serial pool (`SerialPool`):
+    $ python test_mcmc_roman.py 10000 -sampler=emcee -run_name=test_mcmc_roman --file=../yaml/params_test.yaml
+
+    To run with `multiprocessing` utilities (`MultiPool`):
+    $ python test_mcmc_roman.py 10000 -sampler=emcee -run_name=test_mcmc_roman --file=../yaml/params_test.yaml -ncores=28
+
+    To run with mpi pool (`MPIPool`):
+    $ mpiexec -n 16 --mca btl tcp,self python test_mcmc_roman.py 10000 -sampler=emcee -run_name=test_mcmc_roman --file=../yaml/params_test.yaml --mpi
+    '''
     args = parser.parse_args()
 
     pool = schwimmbad.choose_pool(

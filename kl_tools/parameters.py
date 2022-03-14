@@ -52,11 +52,16 @@ class Pars(object):
             "Either initialize Pars object with dict or YAML file!"
         # load parameters from yaml file
         if flag_yaml:
-            #assert os.path.isfile(yaml_file), \
-            #    f'YAML file {yaml_file} does not exist!'
             # interpret YAML dict
-            meta_pars, sampled_pars, self.sampled_fid = \
+            if (os.path.isfile(yaml_file)):
+                with open(yaml_file, 'r') as f:
+                    meta_pars, sampled_pars, self.sampled_fid = \
+                            self._interpret_yaml_file(f)
+            else:
+                meta_pars, sampled_pars, self.sampled_fid = \
                             self._interpret_yaml_file(yaml_file)
+        else:
+            self.sampled_fid = None
         args = {
             'sampled_pars': (sampled_pars, list),
             'meta_pars': (meta_pars, dict)
@@ -80,9 +85,9 @@ class Pars(object):
 
     @classmethod
     def _interpret_yaml_file(cls, yaml_file):
-        print("Reading parameter settings from YAML file {}".format(yaml_file))
-        with open(yaml_file, 'r') as file:
-            pars_dict = yaml.load(file, Loader=yaml.FullLoader)
+        print("Reading parameter settings from YAML file ({})".format(type(yaml_file)))
+        #with open(yaml_file, 'r') as file:
+        pars_dict = yaml.load(yaml_file, Loader=yaml.FullLoader)
         print(pars_dict)
         # 1. get sampled parameters and their sequence
         Nsampled = len(pars_dict['sampled_pars'].keys())

@@ -32,7 +32,7 @@ sampled_pars:
     rscale:
         fid: 0.5
         min: 0.0
-        max: 10.0
+        max: 1.0
         order: 7
 
 # dimension parameters for model cube
@@ -43,10 +43,10 @@ sampled_pars:
 # this meta-grid, then observed data will be interpolated from that. 
 
 model_dimension:
-    Nx: 64
-    Ny: 64
+    Nx: 24
+    Ny: 24
     scale: 0.1 # arcsec
-    lambda_range: [1200., 1400.]
+    lambda_range: [1275., 1350.]
     lambda_res: 1. # nm
     lambda_unit: nm
 
@@ -75,12 +75,12 @@ sed:
     obs_cont_norm: [400, 1.0e-17]
     # a dict of line names and obs-frame flux values (erg/s/cm2)
     lines:
-        Halpha: 1.0e-15
+        Halpha: 5.0e-15
         OII: [1.0e-15, 1.2e-15]
         OIII: [1.0e-15, 1.2e-15]
     # intrinsic linewidth in nm
     line_sigma_int:
-        Halpha: 4.0
+        Halpha: 3.0
         OII: [2.0, 2.0]
         OIII: [3.0, 3.0]
 
@@ -93,13 +93,13 @@ sed:
 # TODO: maybe think about more flexible way to describe dispersion
 observations:
     number_of_observations: 3
-    obs_3:
+    obs_1:
         # Roman WFI/GRISM observation, roll angle 1
         inst_name: Roman/WFI
         type: grism
         bandpass: ../data/Bandpass/Roman/WFI_Grism_1stOrder.dat
-        Nx: 64
-        Ny: 64
+        Nx: 32
+        Ny: 32
         pixel_scale: 0.11 # arcsec
         R_spec: 461.0 # at 1 micron
         # can be 'airy'/'moffat'/'kolmogorov'/'vonkarman'/'opticalpsf'
@@ -122,8 +122,8 @@ observations:
         inst_name: Roman/WFI
         type: grism
         bandpass: ../data/Bandpass/Roman/WFI_Grism_1stOrder.dat
-        Nx: 64              # number of pixels
-        Ny: 64
+        Nx: 32              # number of pixels
+        Ny: 32
         pixel_scale: 0.11      # arcsec
         R_spec: 461            # at 1 micron
         psf_type: airy
@@ -139,12 +139,12 @@ observations:
             sky_level: 0.78
             read_noise: 8.5
 
-    obs_1: # Roman WFI/Photometry image observation, H band
+    obs_3: # Roman WFI/Photometry image observation, H band
         inst_name: Roman/WFI
         type: photometry
         bandpass: ../data/Bandpass/Roman/WFI_F129.dat
-        Nx: 32 # number of pixels
-        Ny: 32 
+        Nx: 24 # number of pixels
+        Ny: 24 
         pixel_scale: 0.11 # arcsec
         psf_type: airy
         psf_kwargs:
