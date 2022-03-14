@@ -174,6 +174,16 @@ class DataSimulator():
             self.pars.theta2pars(theta), self.datacube, 
             {'return_GSObject_blob': True}, redo=True
             )
+        if(True):
+            print("[debug]: add slit mask")
+            # JX: slit mask, for debug
+            _slit_mask = np.zeros((self.Nx, self.Ny))
+            _slit_mask[self.Nx//2-1::self.Nx//2+2,:] = 1.0
+            assert _slit_mask.shape == self.imap_img.data.shape, \
+            f'Inconsistent array'+\
+            f' shape! _slit_mask = {_slit_mask.shape} slice = {self.imap_img.data.shape}'
+            self.imap_img *= _slit_mask
+
         # velocity map for Doppler shift calculation
         self.vmap_img = self.vmap(
             theta, 'obs', self.X, self.Y, 
