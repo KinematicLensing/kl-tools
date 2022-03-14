@@ -152,7 +152,9 @@ class ImageGenerator(DataVector):
             noise_img = photometry_img_withNoise - photometry_img
             assert (photometry_img_withNoise.array is not None), \
                     "Null photometry data"
-            return photometry_img_withNoise.array, noise_img.array
+            #return photometry_img_withNoise.array, noise_img.array
+            return photometry_img.array, noise_img.array
+
 
     def _build_PSF_model(self, **kwargs):
         ''' Generate PSF model
@@ -328,7 +330,9 @@ class GrismGenerator(DataVector):
             grism_img_withNoise.addNoise(noise)
             noise_img = grism_img_withNoise - grism_img
             assert (grism_img_withNoise.array is not None), "Null grism data"
-            return grism_img_withNoise.array, noise_img.array
+            #return grism_img_withNoise.array, noise_img.array
+            return grism_img.array, noise_img.array
+
 
     def _disperse(self, theory_slice, lambdas):
         ''' Disperse a single slice of theory 3d model cube
