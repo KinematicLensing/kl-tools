@@ -68,6 +68,8 @@ def main(args, pool):
     ### ===============================
     # initialize parameters
     pars_from_yaml = Pars(yaml_file=pars_file)
+    truth = pars_from_yaml.sampled_fid
+    true_pars = pars_from_yaml.theta2pars(truth)
     # initialize likelihood
     # the data vector will be generated from `fid_pars`
     logprob = LogPosterior_Roman(pars_from_yaml, 
@@ -144,7 +146,8 @@ def main(args, pool):
             nwalkers, ndims, logprob, None,
             logprob.log_likelihood.parameters
             )
-
+    #-----------------------------------------------------------------
+    # Run chains
     print('Starting mcmc run')
     # try:
     runner.run(nsteps, pool)
@@ -157,9 +160,12 @@ def main(args, pool):
     #     val = np.sqrt(g1**2+g2**2)
     #     print(f' |g1+ig2| = {val}')
     #     raise e
-
     runner.burn_in = nsteps // 2
+
+    #-----------------------------------------------------------------
+    # Sanity check and post-processing
     print('Ending mcmc run')
+    # >>> sampler
     if (sampler == 'zeus') and ((ncores > 1) or (mpi == True)):
         # The sampler isn't pickleable for some reason in this scenario
         # Save whole chain
@@ -178,44 +184,47 @@ def main(args, pool):
         print(f'Pickling runner to {outfile}')
         with open(outfile, 'wb') as f:
             pickle.dump(runner, f)
-
+    # >>> fiducial params
     outfile = os.path.join(outdir, 'test-mcmc-truth.pkl')
     print(f'Pickling truth to {outfile}')
     with open(outfile, 'wb') as f:
         pickle.dump(pars_from_yaml.sampled_fid, f)
-    '''
+    
+    # >>> chain traces
     outfile = os.path.join(outdir, 'chains.png')
     print(f'Saving chain plots to {outfile}')
-    reference = pars.pars2theta(pars_from_yaml.sampled_fid)
+    #reference = pars.pars2theta(pars_from_yaml.sampled_fid)
+    reference = truth
     runner.plot_chains(
         outfile=outfile, reference=reference, show=show
         )
-
+    
+    # >>> posterior
     outfile = os.path.join(outdir, 'corner-truth.png')
     print(f'Saving corner plot to {outfile}')
     title = 'Reference lines are param truth values'
     runner.plot_corner(
         outfile=outfile, reference=truth, title=title, show=show
         )
-
+    
+    # >>> Sanity check on MAP
     runner.compute_MAP()
     map_medians = runner.MAP_medians
+    map_medians_pars = pars_from_yaml.theta2pars(map_medians)
     print('(median) MAP values:')
-    for name, indx in pars_order.items():
-        m = map_medians[indx]
-        print(f'{name}: {m:.4f}')
+    for name, val in map_medians_pars.items():
+        print(f'{name}: {val:.4f}')
+    #outfile = os.path.join(outdir, 'compare-data-to-map.png')
+    #print(f'Plotting MAP comparison to data in {outfile}')
+    #runner.compare_MAP_to_data(outfile=outfile, show=show)
 
-    outfile = os.path.join(outdir, 'compare-data-to-map.png')
-    print(f'Plotting MAP comparison to data in {outfile}')
-    runner.compare_MAP_to_data(outfile=outfile, show=show)
-
-    outfile = os.path.join(outdir, 'compare-vmap-to-map.png')
-    print(f'Plotting MAP comparison to velocity map in {outfile}')
-    vmap_pars = true_pars
-    vmap_pars['r_unit'] = meta_pars['r_unit']
-    vmap_pars['v_unit'] = meta_pars['v_unit']
-    vmap_true = VelocityMap('default', vmap_pars)
-    runner.compare_MAP_to_truth(vmap_true, outfile=outfile, show=show)
+    #outfile = os.path.join(outdir, 'compare-vmap-to-map.png')
+    #print(f'Plotting MAP comparison to velocity map in {outfile}')
+    #vmap_pars = true_pars
+    #vmap_pars['r_unit'] = meta_pars['r_unit']
+    #vmap_pars['v_unit'] = meta_pars['v_unit']
+    #vmap_true = VelocityMap('default', vmap_pars)
+    #runner.compare_MAP_to_truth(vmap_true, outfile=outfile, show=show)
 
     outfile = os.path.join(outdir, 'corner-map.png')
     print(f'Saving corner plot compare to MAP in {outfile}')
@@ -223,7 +232,8 @@ def main(args, pool):
     runner.plot_corner(
         outfile=outfile, reference=runner.MAP_medians, title=title, show=show
         )
-
+    
+    # >>> priors & likelihoods
     if sampler == 'emcee':
         blobs = runner.sampler.blobs
     elif sampler == 'zeus':
@@ -238,11 +248,12 @@ def main(args, pool):
     with open(outfile, 'wb') as f:
         pickle.dump(data, f)
 
+    # >>> likelihood and prior trace of a random walker
     outfile = os.path.join(outdir, 'chain-probabilities.png')
     print(f'Saving prior & likelihood value plot to {outfile}')
+    indx = np.random.randint(0, high=nwalkers)
     prior = blobs[:,indx,0]
     like = blobs[:,indx,1]
-    indx = np.random.randint(0, high=nwalkers)
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(18, 4))
     plt.subplot(131)
     plt.plot(prior, label='prior', c='tab:blue')
@@ -267,7 +278,6 @@ def main(args, pool):
         plt.show()
     else:
         plt.close()
-    '''
     return 0
 
 if __name__ == '__main__':

@@ -16,13 +16,14 @@ import intensity
 from velocity import VelocityMap
 from spectrum import Spectrum
 from parameters import Pars
-from cube import DataVector, GrismGenerator, ImageGenerator
+from cube import DataVector, GrismGenerator, ImageGenerator, SlitSpecGenerator
 import pudb
 
 
 GENERATOR_TYPES = {
     'grism': GrismGenerator,
     'photometry': ImageGenerator,
+    'slit': SlitSpecGenerator,
     #'ifu': ,
 }
 class DataSimulator():
@@ -174,15 +175,6 @@ class DataSimulator():
             self.pars.theta2pars(theta), self.datacube, 
             {'return_GSObject_blob': True}, redo=True
             )
-        if(True):
-            print("[debug]: add slit mask")
-            # JX: slit mask, for debug
-            _slit_mask = np.zeros((self.Nx, self.Ny))
-            _slit_mask[self.Nx//2-1::self.Nx//2+2,:] = 1.0
-            assert _slit_mask.shape == self.imap_img.data.shape, \
-            f'Inconsistent array'+\
-            f' shape! _slit_mask = {_slit_mask.shape} slice = {self.imap_img.data.shape}'
-            self.imap_img *= _slit_mask
 
         # velocity map for Doppler shift calculation
         self.vmap_img = self.vmap(
@@ -193,6 +185,8 @@ class DataSimulator():
         #V = self.vmap('obs', theta, X, Y, use_numba=self.use_numba)
 
         # build Doppler-shifted datacube
+        # self.lambda_cen = observed frame lambda grid
+        # w_mesh = rest frame wavelengths evaluated on observed frame grid
         w_mesh = np.outer(self.lambda_cen, 1./(1.+self.vmap_img))
         w_mesh = w_mesh.reshape(self.lambda_cen.shape+self.vmap_img.shape)
         dc_array = self.sed.spectrum(w_mesh.flatten())
@@ -218,6 +212,10 @@ class DataSimulator():
                 _gal_chromatic = self.gal * self.sed.spectrum
                 _img, _cov = _ds.stack(
                     _gal_chromatic, self.lambdas, force_noise_free
+                    )
+            elif _ds.TYPE == 'slit':
+                _img, _cov = _ds.stack(
+                    self._data, self.lambdas, force_noise_free
                     )
             else:
                 raise TypeError(f'{_ds.TYPE} is not supported now!')

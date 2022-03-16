@@ -442,6 +442,259 @@ class GrismGenerator(DataVector):
             raise ValueError(f'{self.noise_type} not implemented yet!')
         return noise
 
+
+class SlitSpecGenerator(DataVector):
+    ''' Light wrapper around 3D theory model cube, to generate slit spectrum
+
+    Note: 
+    - This class object does not save 3D theory model cube. It saves 
+    properties related with specific instrument and observations (e.g. PSF, 
+    bandpasses, etc.), and provide a realization of the ``stack`` interface
+    - The current API design assumes parameters related with instrument and
+    observations are not being sampled
+    '''
+    TYPE = 'slit'
+    _CHROMATIC_PSF_ = ('airy', 'kolmogorov', 'vonkarman', 'opticalpsf')
+    def __init__(self, pars):
+        ''' Initialize observation-related properties, including:
+        - PSF model
+        - bandpass
+        - etc.
+
+        pars: ``Pars`` object
+            the parameters not sampled during MCMC. These parameters will be
+            used to initialize the generator
+        Let's first write the routine then write the initialization
+        '''
+        # init theory cube & observed data dimensions
+        self.Nx_theory = pars.meta['model_dimension']['Nx']
+        self.Ny_theory = pars.meta['model_dimension']['Ny']
+        self.scale = pars.meta['model_dimension']['scale']
+        self.Nx = pars.meta['observations']['Nx']
+        self.Ny = pars.meta['observations']['Ny']
+        self.pix_scale = pars.meta['observations']['pixel_scale']
+        
+        # init bandpass
+        self.bandpass_file = pars.meta['observations']['bandpass']
+        self.bandpass = gs.Bandpass(self.bandpass_file, wave_type='nm')
+
+        # init psf
+        self.psf_type=pars.meta['observations'].get('psf_type', 'none').lower()
+        self.psf_args=pars.meta['observations'].get('psf_kwargs', {})
+        self.hasPSF = (self.psf_type != 'none')
+        self.hasChromaticPSF = (self.psf_type in 
+            GrismGenerator._CHROMATIC_PSF_)
+
+        # init noise model
+        self.noise_pars = pars.meta['observations'].get('noise', {})
+        self.noise_type = self.noise_pars.get('type', 'none').lower()
+
+        # init dispersion
+        self.R_spec = pars.meta['observations']['R_spec']
+        self.disp_ang = pars.meta['observations']['disp_ang']
+        self._init_dispersion_relation()
+
+        # init slit mask
+        self.slit_width = pars.meta['observations'].get('slit_width', 2.0)
+        self.slit_offset = pars.meta['observations'].get('slit_offset', 0.0)
+        self._init_slit_mask()
+
+        # others
+        self.diameter = pars.meta['observations']['diameter']
+        self.area = np.pi * (self.diameter/2.)**2
+        self.inst_name = pars.meta['observations']['inst_name']
+        self.gain = pars.meta['observations']['gain']
+        self.exp_time = pars.meta['observations']['exp_time']
+        self.offset = pars.meta['observations'].get('offset', 0.0)
+        print("\n[SlitSpecGenerator] Init:")
+        print("--- Instrument name = {}".format(self.inst_name))
+        print("--- Aperture diameter = {:.2f} cm".format(self.diameter))
+        print("--- Aperture area = {:.2f} cm2".format(self.area))
+        print("--- Detector gain = {:.2f}".format(self.gain))
+        print("--- Exposure time = {:.2f} seconds".format(self.exp_time))
+        print("--- Noise type = {}".format(self.noise_type))
+        print("--- PSF type = {}".format(self.psf_type))
+        print("--- Bandpass file = {}".format(self.bandpass_file))
+        print("--- Theory slice dimension = ({:d}, {:d})".format(
+            self.Ny_theory, self.Nx_theory))
+        print("--- Theory slice scale = {:.2f}".format(self.scale))
+        print("--- Observed slice dimension = ({:d}, {:d})".format(
+            self.Ny, self.Nx))
+        print("--- Observed slice pixel scale = {:.2f}".format(self.pix_scale))
+        print("--- Dispersion angle = {:.2f} deg".format(
+            self.disp_ang/np.pi*180))
+        print("--- Spectral resolution at 1um = {:.2f}".format(self.R_spec))
+        print("--- Spectrum offset = {} pixels".format(self.offset))
+        print("--- Slit width (FWHM) = {} arcsec".format(self.slit_width))
+        print("--- Slit offset = {} arcsec".format(self.slit_offset))
+
+        return
+
+    def stack(self, theory_data, lambdas, force_noise_free = False):
+        ''' Generate simulated grism image out of theory 3d model cube
+
+        Inputs:
+        =======
+        theory_data: 3d (Nspec_theory, Ny_theory, Nx_theory) numpy.ndarray
+            the 3d intensity distribution
+        lambdas: 1d (Nspec) list of two-elements tuple
+            the blue and red limits of each theory cube slice
+
+        Outputs:
+        ========
+        data: 2d (Ny, Nx) numpy.ndarray
+            the 2d stacked image
+        noise: 2d (Ny, Nx) numpy.ndarray
+            the 2d image noise
+        '''
+        if not isinstance(theory_data, np.ndarray):
+            raise TypeError(f'theory_data must be numpy.ndarray object!')
+        if theory_data.shape[0] != lambdas.shape[0]:
+            raise ValueError(f'theory_data and lambdas must have the same'+\
+                ' dimension in along axis 0')
+        # disperse and project the theory 3d model cube into grism image
+        _grism_list = list(map(self._disperse, theory_data, lambdas))
+        grism_img = np.sum(_grism_list, axis=0)
+        # convolve with achromatic psf, if required
+        if self.hasPSF and not self.hasChromaticPSF:
+            psf = self._build_PSF_model()
+            grism_img = gs.Convolve([grism_img, psf])
+
+        # apply noise
+        noise = self._getNoise()
+        grism_img_withNoise = grism_img.copy()
+        grism_img_withNoise.addNoise(noise)
+        noise_img = grism_img_withNoise - grism_img
+        assert (grism_img_withNoise.array is not None), "Null grism data"
+        assert (grism_img.array is not None), "Null grism data"
+        if force_noise_free or (self.noise_type == 'none'):
+            return grism_img.array, noise_img.array
+        else:
+            return grism_img_withNoise.array, noise_img.array
+
+    def _disperse(self, theory_slice, lambdas):
+        ''' Disperse a single slice of theory 3d model cube
+
+        Inputs:
+        =======
+        theory_slice: 2d (Ny_theory, Nx_theory) numpy.ndarray
+            a single slice of the theory 3d model
+        lambdas: two-elements tuple
+            the blue and red limits of one theory cube slice
+
+        Outputs:
+        ========
+        data: 2d (Ny, Nx) numpy.ndarray
+            the corresponding grism image if the input slice is dispersed
+
+        '''
+        #theory_slice *= self.slit_mask
+        _img = gs.Image(theory_slice * self.slit_mask, 
+            make_const=True, scale=self.scale)
+        _gal = gs.InterpolatedImage(_img, scale=self.scale)
+        slice_bandpass = self.bandpass.truncate(blue_limit=lambdas[0], 
+                                            red_limit=lambdas[1])
+        # if we adopt chromatic PSF, convolve with PSF model here
+        if self.hasPSF and self.hasChromaticPSF:
+            psf = self._build_PSF_model(lam=np.mean(lambdas))
+            _gal = gs.Convolve([_gal, psf]) 
+        # get dispersion shift, in units of pixels
+        # Note: shift = (dx, dy)
+        shift = self.dispersion_relation((lambdas[0]+lambdas[1])/2.)
+        # draw slice image
+        _grism = _gal.drawImage(nx=self.Nx, ny=self.Ny, scale=self.pix_scale,
+                                method='auto', area=self.area, 
+                                exptime=self.exp_time, gain=self.gain, 
+                                offset=shift,
+                                bandpass=slice_bandpass)
+        return _grism
+
+    def _init_dispersion_relation(self):
+        ''' Initialize Grism dispersion relation
+
+        Note: currently only support linear dispersion relation
+
+        For a galaxy at real position (xcen,ycen), and with
+        dispersion angle theta, the wavelength lam gets dispersed
+        to the new position:
+            x = xcen + (lam * dx/dlam + offset) * cos(theta),
+            y = ycen + (lam * dx/dlam + offset) * sin(theta)
+        '''
+        self.dxdlam = self.R_spec/500.0
+        self.disp_vec = np.array([np.cos(self.disp_ang), 
+                                   np.sin(self.disp_ang)])
+        # lambda expression is not pickleble
+        #self.dispersion_relation = \
+        #    lambda x: (x * dxdlam + self.offset)*disp_direction
+
+        return
+
+    def dispersion_relation(self, x):
+        return (x * self.dxdlam + self.offset)*self.disp_vec
+
+    def _build_PSF_model(self, **kwargs):
+        ''' Generate PSF model
+
+        Inputs:
+        =======
+        kwargs: keyword arguments for building psf model
+            - lam: wavelength in nm
+            - scale: pixel scale
+
+        Outputs:
+        ========
+        psf_model: GalSim PSF object
+
+        '''
+        if self.psf_type is not None:
+            if self.psf_type == 'airy':
+                lam = kwargs.get('lam', 1000) # nm
+                scale = kwargs.get('scale_unit', gs.arcsec)
+                return gs.Airy(lam=lam, diam=self.diameter/100,
+                                scale_unit=scale)
+            elif self.psf_type == 'moffat':
+                beta = self.psf_args.get('beta', 2.5)
+                fwhm = self.psf_args.get('fwhm', 0.5)
+                return gs.Moffat(beta=beta, fwhm=fwhm)
+            else:
+                raise ValueError(f'{psf_type} has not been implemented yet!')
+        else:
+            return None
+
+    def _getNoise(self):
+        ''' Generate image noise based on parameter settings
+
+        Outputs:
+        ========
+        noise: GalSim Noise object
+        '''
+        random_seed = self.noise_pars.get('random_seed', int(time()))
+        rng = gs.BaseDeviate(random_seed+1)
+
+        if self.noise_type == 'ccd' or self.noise_type=='none':
+            sky_level = self.noise_pars.get('sky_level', 0.65*1.2)
+            read_noise = self.noise_pars.get('read_noise', 0.85)
+            noise = gs.CCDNoise(rng=rng, gain=self.gain, 
+                                read_noise=read_noise, sky_level=sky_level)
+        elif self.noise_type == 'gauss':
+            sigma = self.noise_pars.get('sigma', 1.0)
+            noise = gs.GaussianNoise(rng=rng, sigma=sigma)
+        elif self.noise_type == 'poisson':
+            sky_level = self.noise_pars.get('sky_level', 0.65*1.2)
+            noise = gs.PoissonNoise(rng=rng, sky_level=sky_level)
+        else:
+            raise ValueError(f'{self.noise_type} not implemented yet!')
+        return noise
+
+    def _init_slit_mask(self):
+        X, Y = utils.build_map_grid(self.Nx_theory, self.Ny_theory,
+            scale=self.scale)
+
+        _r = X*self.disp_vec[0] + Y*self.disp_vec[1] - self.slit_offset
+        _slit_sigma = self.slit_width / np.sqrt(8.*np.log(2))
+        _mask = np.exp(-0.5 * (_r/_slit_sigma)**2 )
+        self.slit_mask = _mask #/ np.sum(_mask)
+
 class DataCube(DataVector):
     '''
     Base class for an abstract data cube.
