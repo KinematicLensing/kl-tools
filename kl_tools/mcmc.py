@@ -63,6 +63,7 @@ class MCMCRunner(object):
         self.pfunc = pfunc
         self.args = args
         self.kwargs = kwargs
+        self.dsim_ptr = self.pfunc.log_likelihood.dsim
 
         self.has_run = False
         self.has_MAP = False
@@ -459,13 +460,13 @@ class KLensZeusRunner(ZeusRunner):
         # vel_pars['v_unit'] = self.pars['v_unit']
 
         # self.MAP_vmap = VelocityMap('default', vel_pars)
-        self.MAP_vmap = LogLikelihood._setup_vmap(theta_pars, self.pars.meta.pars)
+        #self.MAP_vmap = LogLikelihood._setup_vmap(theta_pars, self.pars.meta.pars)
+        self.dsim_ptr.evaluateTheoryModel(self.MAP_medians)
+        self.MAP_vmap = self.dsim_ptr.vmap_img
 
         # Now do the same for the corresonding (median) MAP intensity map
         # TODO: For now, doing same simple thing in likelihood
-        self.MAP_imap = LogLikelihood._setup_imap(
-            theta_pars, self.datacube, self.pars.meta.pars
-            )
+        self.MAP_imap = self.dsim_ptr.imap_img
 
         return
 
@@ -526,16 +527,16 @@ class KLensZeusRunner(ZeusRunner):
             self.compute_MAP()
 
         # gather needed components to evaluate model
-        datacube = self.datacube
-        lambdas = datacube.lambdas
-        sed_array = LogLikelihood._setup_sed(self.pars.meta.pars)
+        lambdas = self.dsim_ptr.lambdas
+        #sed_array = LogLikelihood._setup_sed(self.pars.meta.pars)
         vmap = self.MAP_vmap
         imap = self.MAP_imap
 
         # create grid of pixel centers in image coords
-        Nx = datacube.Nx
-        Ny = datacube.Ny
-        X, Y = utils.build_map_grid(Nx, Ny)
+        #Nx = datacube.Nx
+        #Ny = datacube.Ny
+        #X, Y = utils.build_map_grid(Nx, Ny)
+        X, Y = self.dsim_ptr.X, self.dsim_ptr.Y
 
         # Compute zfactor from MAP velocity map
         V = vmap('obs', X, Y, normalized=True)
