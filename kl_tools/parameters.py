@@ -89,6 +89,7 @@ class Pars(object):
         #with open(yaml_file, 'r') as file:
         pars_dict = yaml.load(yaml_file, Loader=yaml.FullLoader)
         print(pars_dict)
+
         # 1. get sampled parameters and their sequence
         Nsampled = len(pars_dict['sampled_pars'].keys())
         print(f'{Nsampled} elements are sampled')
@@ -129,6 +130,9 @@ class Pars(object):
         r_unit = Unit(pars_dict['velocity']['r_unit'])
         pars_dict['velocity']['v_unit'] = v_unit
         pars_dict['velocity']['r_unit'] = r_unit
+
+        # 3. interpret apply noise or not
+        # TODO: add noise interpretation
 
         return pars_dict, sampled_pars, fid_sampled
 
