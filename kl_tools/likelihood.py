@@ -702,7 +702,7 @@ class LogLikelihood_Roman(LogBase):
         '''
 
         modelvector, skip = self.dsim.evaluateSimulatedData(
-            theta, force_noise_free=False
+            theta, force_noise_free=True
             )
 
         # in case need marginalizations

@@ -150,8 +150,10 @@ class ImageGenerator(DataVector):
                 "Null photometry data"
         assert (photometry_img.array is not None), "Null photometry data"
         if force_noise_free or self.noise_type == 'none':
+            #print("[ImageGenerator][debug]: noise free")
             return photometry_img.array, noise_img.array
         else:
+            #print("[ImageGenerator][debug]: add noise")
             return photometry_img_withNoise.array, noise_img.array
 
     def _build_PSF_model(self, **kwargs):
@@ -326,8 +328,10 @@ class GrismGenerator(DataVector):
         assert (grism_img_withNoise.array is not None), "Null grism data"
         assert (grism_img.array is not None), "Null grism data"
         if force_noise_free or (self.noise_type == 'none'):
+            #print("[GrismGenerator][debug]: noise free")
             return grism_img.array, noise_img.array
         else:
+            #print("[GrismGenerator][debug]: add noise")
             return grism_img_withNoise.array, noise_img.array
 
     def _disperse(self, theory_slice, lambdas):
@@ -568,8 +572,10 @@ class SlitSpecGenerator(DataVector):
         assert (grism_img_withNoise.array is not None), "Null grism data"
         assert (grism_img.array is not None), "Null grism data"
         if force_noise_free or (self.noise_type == 'none'):
+            #print("[SlitSpecGenerator][debug]: noise free")
             return grism_img.array, noise_img.array
         else:
+            #print("[SlitSpecGenerator][debug]: add noise")
             return grism_img_withNoise.array, noise_img.array
 
     def _disperse(self, theory_slice, lambdas):
