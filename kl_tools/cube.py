@@ -79,7 +79,8 @@ class ImageGenerator(DataVector):
 
         # init noise model
         self.noise_pars = pars.meta['observations'].get('noise', {})
-        self.noise_type = self.noise_pars.get('type', 'none').lower()
+        self.noise_type = self.noise_pars.get('type', 'ccd').lower()
+        self.apply_to_data = self.noise_pars.get('apply_to_data', False)
 
         # others
         self.diameter = pars.meta['observations']['diameter']
@@ -142,19 +143,22 @@ class ImageGenerator(DataVector):
                                 gain=self.gain,
                                 bandpass=self.bandpass)
         # apply noise
-        noise = self._getNoise()
-        photometry_img_withNoise = photometry_img.copy()
-        photometry_img_withNoise.addNoise(noise)
-        noise_img = photometry_img_withNoise - photometry_img
-        assert (photometry_img_withNoise.array is not None), \
-                "Null photometry data"
-        assert (photometry_img.array is not None), "Null photometry data"
-        if force_noise_free or self.noise_type == 'none':
-            #print("[ImageGenerator][debug]: noise free")
-            return photometry_img.array, noise_img.array
+        if force_noise_free:
+            return return photometry_img.array, None
         else:
-            #print("[ImageGenerator][debug]: add noise")
-            return photometry_img_withNoise.array, noise_img.array
+            noise = self._getNoise()
+            photometry_img_withNoise = photometry_img.copy()
+            photometry_img_withNoise.addNoise(noise)
+            noise_img = photometry_img_withNoise - photometry_img
+            assert (photometry_img_withNoise.array is not None), \
+                    "Null photometry data"
+            assert (photometry_img.array is not None), "Null photometry data"
+            if self.apply_to_data:
+                #print("[ImageGenerator][debug]: add noise")
+                return photometry_img_withNoise.array, noise_img.array
+            else:
+                #print("[ImageGenerator][debug]: noise free")
+                return photometry_img.array, noise_img.array
 
     def _build_PSF_model(self, **kwargs):
         ''' Generate PSF model
@@ -195,7 +199,7 @@ class ImageGenerator(DataVector):
         random_seed = self.noise_pars.get('random_seed', int(time()))
         rng = gs.BaseDeviate(random_seed+1)
 
-        if self.noise_type == 'ccd' or self.noise_type=='none':
+        if self.noise_type == 'ccd':
             sky_level = self.noise_pars.get('sky_level', 0.65*1.2)
             read_noise = self.noise_pars.get('read_noise', 0.85)
             noise = gs.CCDNoise(rng=rng, gain=self.gain, 
@@ -254,7 +258,8 @@ class GrismGenerator(DataVector):
 
         # init noise model
         self.noise_pars = pars.meta['observations'].get('noise', {})
-        self.noise_type = self.noise_pars.get('type', 'none').lower()
+        self.noise_type = self.noise_pars.get('type', 'ccd').lower()
+        self.apply_to_data = self.noise_pars.get('apply_to_data', False)
 
         # init dispersion
         self.R_spec = pars.meta['observations']['R_spec']
@@ -321,18 +326,21 @@ class GrismGenerator(DataVector):
             grism_img = gs.Convolve([grism_img, psf])
 
         # apply noise
-        noise = self._getNoise()
-        grism_img_withNoise = grism_img.copy()
-        grism_img_withNoise.addNoise(noise)
-        noise_img = grism_img_withNoise - grism_img
-        assert (grism_img_withNoise.array is not None), "Null grism data"
-        assert (grism_img.array is not None), "Null grism data"
-        if force_noise_free or (self.noise_type == 'none'):
-            #print("[GrismGenerator][debug]: noise free")
-            return grism_img.array, noise_img.array
+        if force_noise_free:
+            return grism_img.array, None
         else:
-            #print("[GrismGenerator][debug]: add noise")
-            return grism_img_withNoise.array, noise_img.array
+            noise = self._getNoise()
+            grism_img_withNoise = grism_img.copy()
+            grism_img_withNoise.addNoise(noise)
+            noise_img = grism_img_withNoise - grism_img
+            assert (grism_img_withNoise.array is not None), "Null grism data"
+            assert (grism_img.array is not None), "Null grism data"
+            if self.apply_to_data:
+                #print("[GrismGenerator][debug]: add noise")
+                return grism_img_withNoise.array, noise_img.array
+            else:
+                #print("[GrismGenerator][debug]: noise free")
+                return grism_img.array, noise_img.array
 
     def _disperse(self, theory_slice, lambdas):
         ''' Disperse a single slice of theory 3d model cube
@@ -431,7 +439,7 @@ class GrismGenerator(DataVector):
         random_seed = self.noise_pars.get('random_seed', int(time()))
         rng = gs.BaseDeviate(random_seed+1)
 
-        if self.noise_type == 'ccd' or self.noise_type=='none':
+        if self.noise_type == 'ccd':
             sky_level = self.noise_pars.get('sky_level', 0.65*1.2)
             read_noise = self.noise_pars.get('read_noise', 0.85)
             noise = gs.CCDNoise(rng=rng, gain=self.gain, 
@@ -492,6 +500,7 @@ class SlitSpecGenerator(DataVector):
         # init noise model
         self.noise_pars = pars.meta['observations'].get('noise', {})
         self.noise_type = self.noise_pars.get('type', 'none').lower()
+        self.apply_to_data = self.noise_pars.get('apply_to_data', False)
 
         # init dispersion
         self.R_spec = pars.meta['observations']['R_spec']
@@ -565,18 +574,21 @@ class SlitSpecGenerator(DataVector):
             grism_img = gs.Convolve([grism_img, psf])
 
         # apply noise
-        noise = self._getNoise()
-        grism_img_withNoise = grism_img.copy()
-        grism_img_withNoise.addNoise(noise)
-        noise_img = grism_img_withNoise - grism_img
-        assert (grism_img_withNoise.array is not None), "Null grism data"
-        assert (grism_img.array is not None), "Null grism data"
-        if force_noise_free or (self.noise_type == 'none'):
-            #print("[SlitSpecGenerator][debug]: noise free")
-            return grism_img.array, noise_img.array
+        if force_noise_free:
+            return grism_img.array, None
         else:
-            #print("[SlitSpecGenerator][debug]: add noise")
-            return grism_img_withNoise.array, noise_img.array
+            noise = self._getNoise()
+            grism_img_withNoise = grism_img.copy()
+            grism_img_withNoise.addNoise(noise)
+            noise_img = grism_img_withNoise - grism_img
+            assert (grism_img_withNoise.array is not None), "Null grism data"
+            assert (grism_img.array is not None), "Null grism data"
+            if self.apply_to_data:
+                #print("[SlitSpecGenerator][debug]: add noise")
+                return grism_img_withNoise.array, noise_img.array
+            else:
+                #print("[SlitSpecGenerator][debug]: noise free")
+                return grism_img.array, noise_img.array
 
     def _disperse(self, theory_slice, lambdas):
         ''' Disperse a single slice of theory 3d model cube
@@ -677,7 +689,7 @@ class SlitSpecGenerator(DataVector):
         random_seed = self.noise_pars.get('random_seed', int(time()))
         rng = gs.BaseDeviate(random_seed+1)
 
-        if self.noise_type == 'ccd' or self.noise_type=='none':
+        if self.noise_type == 'ccd':
             sky_level = self.noise_pars.get('sky_level', 0.65*1.2)
             read_noise = self.noise_pars.get('read_noise', 0.85)
             noise = gs.CCDNoise(rng=rng, gain=self.gain, 

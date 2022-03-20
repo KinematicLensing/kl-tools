@@ -116,12 +116,23 @@ class Pars(object):
                     f' prior should be specified for {key}!'
             if flag_flat:
                 _min, _max = val['min'], val['max']
-                print(f'prior = priors.UniformPrior({_min}, {_max})')
-                pars_priors[key] = priors.UniformPrior(_min, _max)
+                _inclusive = val.get('inclusive', False)
+                assert isinstance(_inclusive, bool), f'inclusive should be '+\
+                f'bool but is {_inclusive}!'
+                print(f'prior = priors.UniformPrior({_min}, {_max},'+\
+                    f' inclusive={_inclusive})')
+                pars_priors[key] = priors.UniformPrior(_min, _max,
+                    inclusive = _inclusive)
             else:
                 _mean, _std = val['mean'], val['std']
-                print(f'prior = priors.GaussPrior({_mean}, {_std})')
-                pars_priors[key] = priors.GaussPrior(_mean, _std)
+                _clip_sigmas = val.get('clip_sigmas', None)
+                _zero_boundary = val.get('zero_boundary', None)
+                print(f'prior = priors.GaussPrior({_mean}, {_std}, '+\
+                    f'clip_sigmas = {_clip_sigmas}, '+\
+                    f'zero_boundary = {_zero_boundary})')
+                pars_priors[key] = priors.GaussPrior(_mean, _std,
+                    clip_sigmas = _clip_sigmas,
+                    zero_boundary = _zero_boundary)
         del pars_dict['sampled_pars']
         pars_dict['priors'] = pars_priors
 
@@ -130,9 +141,6 @@ class Pars(object):
         r_unit = Unit(pars_dict['velocity']['r_unit'])
         pars_dict['velocity']['v_unit'] = v_unit
         pars_dict['velocity']['r_unit'] = r_unit
-
-        # 3. interpret apply noise or not
-        # TODO: add noise interpretation
 
         return pars_dict, sampled_pars, fid_sampled
 
