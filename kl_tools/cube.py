@@ -144,7 +144,7 @@ class ImageGenerator(DataVector):
                                 bandpass=self.bandpass)
         # apply noise
         if force_noise_free:
-            return return photometry_img.array, None
+            return photometry_img.array, None
         else:
             noise = self._getNoise()
             photometry_img_withNoise = photometry_img.copy()
