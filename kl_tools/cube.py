@@ -360,6 +360,7 @@ class GrismGenerator(DataVector):
             the corresponding grism image if the input slice is dispersed
 
         '''
+        # theory_slice in units of photons/s/cm2
         _img = gs.Image(theory_slice, make_const=True, scale=self.scale)
         _gal = gs.InterpolatedImage(_img, scale=self.scale)
         slice_bandpass = self.bandpass.truncate(blue_limit=lambdas[0], 

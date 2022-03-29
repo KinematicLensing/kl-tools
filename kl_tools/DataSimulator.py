@@ -188,7 +188,8 @@ class DataSimulator():
         # build Doppler-shifted datacube
         # self.lambda_cen = observed frame lambda grid
         # w_mesh = rest frame wavelengths evaluated on observed frame grid
-        # TODO: energy conserved?
+        # To make energy conserved, dc_array in units of 
+        # photons / (s cm2)
         w_mesh = np.outer(self.lambda_cen, 1./(1.+self.vmap_img))
         w_mesh = w_mesh.reshape(self.lambda_cen.shape+self.vmap_img.shape)
         # photons/s/cm2 in the 3D grid
