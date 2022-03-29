@@ -28,6 +28,7 @@ sampled_pars:
         fid: 200.0
         mean: 200.0
         std: 10.0
+        clip_sigmas: 10.0
         order: 6
     rscale:
         fid: 0.5
@@ -119,6 +120,7 @@ observations:
             type: ccd
             sky_level: 0.78
             read_noise: 8.5
+            apply_to_data: True
      
     obs_2: # Roman WFI/GRISM-slit observation, roll angle 2
         inst_name: Roman/WFI
@@ -142,6 +144,7 @@ observations:
             type: ccd
             sky_level: 0.78
             read_noise: 8.5
+            apply_to_data: True
 
     obs_3: # Roman WFI/Photometry image observation, J band
         inst_name: Roman/WFI
@@ -160,5 +163,6 @@ observations:
             type: ccd
             sky_level: 0.78
             read_noise: 8.5
+            apply_to_data: True
 
 use_numba: False
