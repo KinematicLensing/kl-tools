@@ -1,0 +1,167 @@
+sampled_pars:
+    g1:
+        fid: 0.0
+        min: -1.0
+        max: 1.0
+        order: 1
+    g2:
+        fid: 0.0
+        min: -1.0
+        max: 1.0
+        order: 2
+    theta_int:
+        fid: 0.0
+        min: -1.5708
+        max:  1.5708
+        order: 3
+    sini:
+        fid: 0.5
+        min: -1.0
+        max: 1.0
+        order: 4
+    v0:
+        fid: 0.0
+        mean: 0.0
+        std:  20.0
+        clip_sigmas: 10.0
+        order: 5
+    vcirc:
+        fid: 200.0
+        mean: 200.0
+        std: 10.0
+        clip_sigmas: 10.0
+        order: 6
+    rscale:
+        fid: 0.5
+        min: 0.0
+        max: 2.0
+        order: 7
+
+# dimension parameters for model cube
+# Note that the dimensions and scales in this parameter are irrelevant
+# to the pixel scale and number of pixels in the observed image. The 
+# model cube object is by design independent of the configurations of
+# observations. A parametric surface brightness profile is drawn on 
+# this meta-grid, then observed data will be interpolated from that. 
+
+model_dimension:
+    Nx: 48
+    Ny: 48
+    scale: 0.1 # arcsec
+    lambda_range: [1190., 1370.]
+    lambda_res: 4 # nm
+    lambda_unit: nm
+
+# intensity profile, or surface brightness model for the galaxy
+
+intensity:
+    type: inclined_exp
+    hlr: 0.5 # arcsec
+
+# kinematics model for the galaxy
+
+velocity:
+    model_name: default
+    v_unit: km / s
+    r_unit: arcsec
+
+# SED model for the galaxy
+
+sed:
+    template: ../data/Simulation/GSB2.spec
+    wave_type: Ang
+    flux_type: flambda
+    z: 0.9513
+    wave_range: [500., 3000.] # nm
+    # obs-frame continuum normalization (nm, erg/s/cm2/nm)
+    obs_cont_norm: [614, 3.9e-17]
+    # a dict of line names and obs-frame flux values (erg/s/cm2)
+    lines:
+        Halpha: 5.0e-16
+        OII: [1.0e-15, 1.2e-15]
+        OIII: [1.0e-15, 1.2e-15]
+    # intrinsic linewidth in nm
+    line_sigma_int:
+        Halpha: 2
+        OII: [0.2, 0.2]
+        OIII: [0.2, 0.2]
+
+# observation related parameters
+# Note that from the same galaxy and shear model, we can derive 
+# multiple types of data,
+# e.g. `photometry`, `slit_spectroscopy`, `grism` and/or `IFU`.
+# Thus 'observations' is a list of dictionaries that specify 
+# observation-wise parameters.
+# TODO: maybe think about more flexible way to describe dispersion
+# 4 exposures per pointing, 800s in direct imaging and 5000s in grism
+observations:
+    number_of_observations: 3
+    obs_1:
+        # HST WFC3/IR G141 observation, roll angle 1
+        inst_name: HST/WFC3
+        type: grism
+        bandpass: ../data/Bandpass/HST/WFC3_IR_G141_1st.dat
+        Nx: 36
+        Ny: 36
+        pixel_scale: 0.13 # arcsec
+        R_spec: 107.53 # at 1 micron
+        # can be 'airy'/'moffat'/'kolmogorov'/'vonkarman'/'opticalpsf'
+        psf_type: airy
+        # pass the needed params to build PSF model here
+        # in case of airy, we don't need any params
+        psf_kwargs:
+            fwhm: 0.13 # arcsec
+        disp_ang: 0.0 # radian
+        offset: -275.48161224045805 # pix
+        diameter: 240 # cm
+        exp_time: 5000. # seconds
+        gain: 1. # electron per ADU
+        noise:
+            type: ccd
+            sky_level: 0.5 # 1.0 electron per sec per pix
+            read_noise: 40 # 20 electron per pix per readout, x2
+            apply_to_data: False
+     
+    obs_2: # HST WFC3/IR G141 observation, roll angle 2
+        inst_name: HST/WFC3
+        type: grism
+        bandpass: ../data/Bandpass/HST/WFC3_IR_G141_1st.dat
+        Nx: 36              # number of pixels
+        Ny: 36
+        pixel_scale: 0.13      # arcsec
+        R_spec:  107.53          # at 1 micron
+        psf_type: airy
+        psf_kwargs: 
+            fwhm: 0.13     # arcsec
+        disp_ang: 1.5708  # radian
+        offset: -275.48161224045805 #pix
+        diameter: 240 # cm
+        exp_time: 5000. # seconds
+        gain: 1.
+        noise:
+            type: ccd
+            sky_level: 0.5
+            read_noise: 40
+            apply_to_data: False
+
+    obs_3: # HST WFC3/IR image observation, F125W
+        inst_name: HST/WFC3
+        type: photometry
+        bandpass: ../data/Bandpass/HST/WFC3_IR_F125W.dat
+        Nx: 36 # number of pixels
+        Ny: 36 
+        pixel_scale: 0.13 # arcsec
+        psf_type: airy
+        psf_kwargs:
+            fwhm: 0.13 # arcsec
+        diameter: 240 # cm
+        exp_time: 800. # seconds
+        gain: 1.
+        noise:
+            type: ccd
+            sky_level: 0.5
+            read_noise: 40
+            apply_to_data: False
+
+
+use_numba: False
