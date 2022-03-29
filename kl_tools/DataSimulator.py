@@ -76,6 +76,7 @@ class DataSimulator():
         self.lambdas = np.array([(l, l+dlam) for l in blue_edge])
         self.lambda_unit = self.pars.meta['model_dimension']['lambda_unit']
         self.lambda_cen = np.mean(self.lambdas, axis=1)
+        self.dlam = dlam
         self.Nspec = self.lambdas.shape[0]
         self.shape = (self.Nspec, self.Ny, self.Nx)
         self._data = None
@@ -187,11 +188,15 @@ class DataSimulator():
         # build Doppler-shifted datacube
         # self.lambda_cen = observed frame lambda grid
         # w_mesh = rest frame wavelengths evaluated on observed frame grid
+        # To make energy conserved, dc_array in units of 
+        # photons / (s cm2)
         w_mesh = np.outer(self.lambda_cen, 1./(1.+self.vmap_img))
         w_mesh = w_mesh.reshape(self.lambda_cen.shape+self.vmap_img.shape)
-        dc_array = self.sed.spectrum(w_mesh.flatten())
+        # photons/s/cm2 in the 3D grid
+        dc_array = self.sed.spectrum(w_mesh.flatten()) * self.dlam
         dc_array = dc_array.reshape(w_mesh.shape) * \
-                        self.imap_img[np.newaxis, :, :]
+                        self.imap_img[np.newaxis, :, :] /\
+                        (1+self.vmap_img[np.newaxis, :, :]) 
         self._data = dc_array
 
         return

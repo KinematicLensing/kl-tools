@@ -201,9 +201,11 @@ class ImageGenerator(DataVector):
 
         if self.noise_type == 'ccd':
             sky_level = self.noise_pars.get('sky_level', 0.65*1.2)
-            read_noise = self.noise_pars.get('read_noise', 0.85)
+            read_noise = self.noise_pars.get('read_noise', 8.5)
+            # sky_level: electron/s/pix -> ADU/pix
             noise = gs.CCDNoise(rng=rng, gain=self.gain, 
-                                read_noise=read_noise, sky_level=sky_level)
+                                read_noise=read_noise, 
+                                sky_level=sky_level*self.exp_time/self.gain)
         elif self.noise_type == 'gauss':
             sigma = self.noise_pars.get('sigma', 1.0)
             noise = gs.GaussianNoise(rng=rng, sigma=sigma)
@@ -358,6 +360,7 @@ class GrismGenerator(DataVector):
             the corresponding grism image if the input slice is dispersed
 
         '''
+        # theory_slice in units of photons/s/cm2
         _img = gs.Image(theory_slice, make_const=True, scale=self.scale)
         _gal = gs.InterpolatedImage(_img, scale=self.scale)
         slice_bandpass = self.bandpass.truncate(blue_limit=lambdas[0], 
@@ -441,9 +444,10 @@ class GrismGenerator(DataVector):
 
         if self.noise_type == 'ccd':
             sky_level = self.noise_pars.get('sky_level', 0.65*1.2)
-            read_noise = self.noise_pars.get('read_noise', 0.85)
+            read_noise = self.noise_pars.get('read_noise', 8.5)
             noise = gs.CCDNoise(rng=rng, gain=self.gain, 
-                                read_noise=read_noise, sky_level=sky_level)
+                                read_noise=read_noise, 
+                                sky_level=sky_level*self.exp_time/self.gain)
         elif self.noise_type == 'gauss':
             sigma = self.noise_pars.get('sigma', 1.0)
             noise = gs.GaussianNoise(rng=rng, sigma=sigma)
@@ -691,9 +695,10 @@ class SlitSpecGenerator(DataVector):
 
         if self.noise_type == 'ccd':
             sky_level = self.noise_pars.get('sky_level', 0.65*1.2)
-            read_noise = self.noise_pars.get('read_noise', 0.85)
+            read_noise = self.noise_pars.get('read_noise', 8.5)
             noise = gs.CCDNoise(rng=rng, gain=self.gain, 
-                                read_noise=read_noise, sky_level=sky_level)
+                                read_noise=read_noise, 
+                                sky_level=sky_level*self.exp_time/self.gain)
         elif self.noise_type == 'gauss':
             sigma = self.noise_pars.get('sigma', 1.0)
             noise = gs.GaussianNoise(rng=rng, sigma=sigma)
