@@ -190,7 +190,10 @@ class LogPosterior_Roman(LogBase):
         tuple
         '''
         ans = [prior, np.sum(likelihood)]
-        ans.extend(likelihood)
+        if isinstance(likelihood, (list, np.ndarray)):
+            ans.extend(likelihood)
+        else:
+            ans.extend([likelihood])
         return ans
 
     def __call__(self, theta):
