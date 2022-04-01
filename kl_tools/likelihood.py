@@ -189,8 +189,9 @@ class LogPosterior_Roman(LogBase):
         For the base class, this will just be the (prior, likelihood)
         tuple
         '''
-
-        return (prior, likelihood)
+        ans = [prior, np.sum(likelihood)]
+        ans.extend(likelihood)
+        return ans
 
     def __call__(self, theta):
         '''
@@ -210,9 +211,9 @@ class LogPosterior_Roman(LogBase):
             return -np.inf, self.blob(-np.inf, -np.inf)
 
         else:
-            loglike = self.log_likelihood(theta)
+            loglikes = self.log_likelihood(theta)
 
-        return logprior + loglike, self.blob(logprior, loglike)
+        return logprior + np.sum(loglikes), self.blob(logprior, loglikes)
 
 class LogPrior(LogBase):
     def __init__(self, parameters):
@@ -711,7 +712,7 @@ class LogLikelihood_Roman(LogBase):
             map(self._log_likelihood, 
                 modelvector, self.datavector, self.invcov)
             )
-        return np.sum(log_like) # + (-0.5 * log_det)
+        return log_like # + (-0.5 * log_det)
 
     @classmethod
     def _log_likelihood(cls, modelvector, datavector, inv_cov):
