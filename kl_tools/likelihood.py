@@ -179,6 +179,7 @@ class LogPosterior_Roman(LogBase):
             datavector=datavector, covmat=covmat, fid_pars=fid_pars)
 
         self.ndims = len(parameters.sampled)
+        self.nobs = self.log_likelihood.dsim.Nobs
 
         return
 
@@ -191,9 +192,13 @@ class LogPosterior_Roman(LogBase):
         '''
         ans = [prior, np.sum(likelihood)]
         if isinstance(likelihood, (list, np.ndarray)):
-            ans.extend(likelihood)
+            _like = np.array(likelihood)
+            ans.extend(_like.flatten())
         else:
-            ans.extend([likelihood])
+            for i in range(self.nobs):
+                ans.append(likelihood)
+        assert len(ans) == 2 + self.nobs, f'blob has a wrong shape!'+\
+        f'\nans = {ans}\n likelihood = {likelihood}'
         return ans
 
     def __call__(self, theta):
