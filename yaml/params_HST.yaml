@@ -45,11 +45,11 @@ sampled_pars:
 # this meta-grid, then observed data will be interpolated from that. 
 
 model_dimension:
-    Nx: 48
-    Ny: 48
-    scale: 0.1 # arcsec
+    Nx: 96
+    Ny: 96
+    scale: 0.05 # arcsec
     lambda_range: [1190., 1370.]
-    lambda_res: 4 # nm
+    lambda_res: 1 # nm
     lambda_unit: nm
 
 # intensity profile, or surface brightness model for the galaxy
@@ -101,9 +101,9 @@ observations:
         inst_name: HST/WFC3
         type: grism
         bandpass: ../data/Bandpass/HST/WFC3_IR_G141_1st.dat
-        Nx: 36
-        Ny: 36
-        pixel_scale: 0.13 # arcsec
+        Nx: 72
+        Ny: 72
+        pixel_scale: 0.065 # arcsec
         R_spec: 107.53 # at 1 micron
         # can be 'airy'/'moffat'/'kolmogorov'/'vonkarman'/'opticalpsf'
         psf_type: airy
@@ -126,14 +126,14 @@ observations:
         inst_name: HST/WFC3
         type: grism
         bandpass: ../data/Bandpass/HST/WFC3_IR_G141_1st.dat
-        Nx: 36              # number of pixels
-        Ny: 36
-        pixel_scale: 0.13      # arcsec
+        Nx: 72              # number of pixels
+        Ny: 72
+        pixel_scale: 0.065      # arcsec
         R_spec:  107.53          # at 1 micron
         psf_type: airy
         psf_kwargs: 
             fwhm: 0.13     # arcsec
-        disp_ang: 1.5708  # radian
+        disp_ang: 1.57  # radian
         offset: -275.48161224045805 #pix
         diameter: 240 # cm
         exp_time: 5000. # seconds
@@ -143,14 +143,39 @@ observations:
             sky_level: 0.5
             read_noise: 40
             apply_to_data: False
+    #obs_3:
+    #    # HST WFC3/IR G141 observation, roll angle 1
+    #    inst_name: HST/WFC3
+    #    type: grism
+    #    bandpass: ../data/Bandpass/HST/WFC3_IR_G141_1st.dat
+    #    Nx: 36
+    #    Ny: 36
+    #    pixel_scale: 0.13 # arcsec
+    #    R_spec: 107.53 # at 1 micron
+    #    # can be 'airy'/'moffat'/'kolmogorov'/'vonkarman'/'opticalpsf'
+    #    psf_type: airy
+    #    # pass the needed params to build PSF model here
+    #    # in case of airy, we don't need any params
+    #    psf_kwargs:
+    #        fwhm: 0.13 # arcsec
+    #    disp_ang: -1.0472 # radian
+    #    offset: -275.48161224045805 # pix
+    #    diameter: 240 # cm
+    #    exp_time: 5000. # seconds
+    #    gain: 1. # electron per ADU
+    #    noise:
+    #        type: ccd
+    #        sky_level: 0.5 # 1.0 electron per sec per pix
+    #        read_noise: 40 # 20 electron per pix per readout, x2
+    #        apply_to_data: False
 
     obs_3: # HST WFC3/IR image observation, F125W
         inst_name: HST/WFC3
         type: photometry
         bandpass: ../data/Bandpass/HST/WFC3_IR_F125W.dat
-        Nx: 36 # number of pixels
-        Ny: 36 
-        pixel_scale: 0.13 # arcsec
+        Nx: 72 # number of pixels
+        Ny: 72 
+        pixel_scale: 0.065 # arcsec
         psf_type: airy
         psf_kwargs:
             fwhm: 0.13 # arcsec
