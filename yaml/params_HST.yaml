@@ -1,13 +1,13 @@
 sampled_pars:
     g1:
         fid: 0.0
-        min: -1.0
-        max: 1.0
+        min: -1.0e-5
+        max: 1.0e-5
         order: 1
     g2:
         fid: 0.0
-        min: -1.0
-        max: 1.0
+        min: -1.0e-5
+        max: 1.0e-5
         order: 2
     theta_int:
         fid: 0.0
@@ -45,9 +45,9 @@ sampled_pars:
 # this meta-grid, then observed data will be interpolated from that. 
 
 model_dimension:
-    Nx: 96
-    Ny: 96
-    scale: 0.05 # arcsec
+    Nx: 48
+    Ny: 48
+    scale: 0.1 # arcsec
     lambda_range: [1190., 1370.]
     lambda_res: 1 # nm
     lambda_unit: nm
@@ -101,9 +101,9 @@ observations:
         inst_name: HST/WFC3
         type: grism
         bandpass: ../data/Bandpass/HST/WFC3_IR_G141_1st.dat
-        Nx: 72
-        Ny: 72
-        pixel_scale: 0.065 # arcsec
+        Nx: 36
+        Ny: 36
+        pixel_scale: 0.13 # arcsec
         R_spec: 107.53 # at 1 micron
         # can be 'airy'/'moffat'/'kolmogorov'/'vonkarman'/'opticalpsf'
         psf_type: airy
@@ -126,9 +126,9 @@ observations:
         inst_name: HST/WFC3
         type: grism
         bandpass: ../data/Bandpass/HST/WFC3_IR_G141_1st.dat
-        Nx: 72              # number of pixels
-        Ny: 72
-        pixel_scale: 0.065      # arcsec
+        Nx: 36              # number of pixels
+        Ny: 36
+        pixel_scale: 0.13      # arcsec
         R_spec:  107.53          # at 1 micron
         psf_type: airy
         psf_kwargs: 
@@ -173,9 +173,9 @@ observations:
         inst_name: HST/WFC3
         type: photometry
         bandpass: ../data/Bandpass/HST/WFC3_IR_F125W.dat
-        Nx: 72 # number of pixels
-        Ny: 72 
-        pixel_scale: 0.065 # arcsec
+        Nx: 36 # number of pixels
+        Ny: 36
+        pixel_scale: 0.13 # arcsec
         psf_type: airy
         psf_kwargs:
             fwhm: 0.13 # arcsec
