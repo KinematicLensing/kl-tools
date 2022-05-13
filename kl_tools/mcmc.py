@@ -94,12 +94,12 @@ class MCMCRunner(object):
         '''
 
         #if 'priors' in self.kwargs['pars']:
-        if 'priors' in self.pfunc.log_likelihood.meta.keys():
+        if 'priors' in self.pfunc.meta.keys():
             # use peak of priors for initialization
             self.start = np.zeros((self.nwalkers, self.ndim))
 
             for name, indx in self.pars_order.items():
-                prior = self.pfunc.log_likelihood.meta['priors'][name]
+                prior = self.pfunc.meta['priors'][name]
                 peak, cen = prior.peak, prior.cen
 
                 base = peak if peak is not None else cen
@@ -452,8 +452,8 @@ class KLensZeusRunner(ZeusRunner):
             discard=discard, thin=thin, recompute=recompute
             )
 
-        theta_pars = self.pars.theta2pars(self.MAP_medians)
-
+        #theta_pars = self.pars.theta2pars(self.MAP_medians)
+        theta = self.pars.complete_sampled_theta(self.MAP_medians)
         # Now compute the corresonding (median) MAP velocity map
         # vel_pars = theta_pars.copy()
         # vel_pars['r_unit'] = self.pars['r_unit']
@@ -461,7 +461,8 @@ class KLensZeusRunner(ZeusRunner):
 
         # self.MAP_vmap = VelocityMap('default', vel_pars)
         #self.MAP_vmap = LogLikelihood._setup_vmap(theta_pars, self.pars.meta.pars)
-        self.dsim_ptr.evaluateTheoryModel(self.MAP_medians)
+        #self.dsim_ptr.evaluateTheoryModel(self.MAP_medians)
+        self.dsim_ptr.evaluateTheoryModel(theta)
         self.MAP_vmap = self.dsim_ptr.vmap_img
 
         # Now do the same for the corresonding (median) MAP intensity map

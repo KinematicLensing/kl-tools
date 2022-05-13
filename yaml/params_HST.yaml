@@ -1,13 +1,15 @@
-sampled_pars:
+dynamic_pars:
     g1:
         fid: 0.0
-        min: -1.0e-5
-        max: 1.0e-5
+        fixed: True
+        #min: -1.0
+        #max: 1.0
         order: 1
     g2:
         fid: 0.0
-        min: -1.0e-5
-        max: 1.0e-5
+        fixed: True
+        #min: -1.0
+        #max: 1.0
         order: 2
     theta_int:
         fid: 0.0
@@ -16,23 +18,23 @@ sampled_pars:
         order: 3
     sini:
         fid: 0.5
-        min: -1.0
+        min: 0.0
         max: 1.0
         order: 4
     v0:
         fid: 0.0
         mean: 0.0
-        std:  20.0
+        std:  100.0
         clip_sigmas: 10.0
         order: 5
     vcirc:
-        fid: 200.0
-        mean: 200.0
-        std: 10.0
-        clip_sigmas: 10.0
+        fid: 300.0
+        mean: 300.0
+        std: 100.0
+        clip_sigmas: 3.0
         order: 6
     rscale:
-        fid: 0.5
+        fid: 0.4
         min: 0.0
         max: 2.0
         order: 7
@@ -56,7 +58,7 @@ model_dimension:
 
 intensity:
     type: inclined_exp
-    hlr: 0.5 # arcsec
+    hlr: 0.8 # arcsec
 
 # kinematics model for the galaxy
 
