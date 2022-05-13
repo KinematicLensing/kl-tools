@@ -35,15 +35,16 @@ class VelocityModel(object):
     _model_params = ['v0', 'vcirc', 'rscale', 'sini',
                      'theta_int', 'g1', 'g2', 'r_unit', 'v_unit']
 
-    def __init__(self, sampled_pars, meta_pars):
-        if not isinstance(sampled_pars, SampledPars):
-            t = type(sampled_pars)
-            raise TypeError(f'sampled_pars must be a SampledPars, not a {t}!')
+    def __init__(self, pars, meta_pars):
+        if not isinstance(pars, Pars):
+            t = type(pars)
+            raise TypeError(f'pars must be a Pars object, not a {t}!')
         if not isinstance(meta_pars, dict):
             t = type(meta_pars)
             raise TypeError(f'meta_pars must be a dict, not a {t}!')
 
-        self.sp = sampled_pars
+        self.pars = pars
+        self.sp = pars.sampled
         self.mp = meta_pars
 
         self._check_model_pars()
@@ -54,7 +55,7 @@ class VelocityModel(object):
         mname = self.name
         _mp = []
         # Make sure there are no undefined pars
-        for name in self.sp.keys():
+        for name in self.pars.dynamic_pars_order:
             if name not in self._model_params:
                 raise AttributeError(f'{name} is not a valid model ' +\
                                      f'parameter for {mname} velocity model!')
@@ -107,29 +108,36 @@ class VelocityMap(TransformableImage):
     obs:  Observed image plane. Sheared version of source plane
     '''
 
-    def __init__(self, model_name, sampled_pars, meta_pars):
+    def __init__(self, model_name, pars, meta_pars):
         '''
         model_name: The name of the velocity to model.
-        sampled_pars: A SampledPars with key:index pairs for the sampled model
-            parameters. Must be a registered velocity model.
+        pars: A `Pars` object with key:index pairs 
+            for the sampled model parameters. Must be a registered 
+            velocity model.
         meta_pars: A dict with key:val pairs for the unsampled model parameters
         '''
 
 
         self.model_name = model_name
-        self.model = build_model(model_name, sampled_pars, meta_pars)
+        self.model = build_model(model_name, pars, meta_pars)
 
         #transform_pars = self.model.get_transform_pars()
         super(VelocityMap, self).__init__()
 
         return
 
-    def __call__(self, pars, plane, x, y, speed=False, normalized=False,
+    def __call__(self, theta, plane, x, y, speed=False, normalized=False,
                  use_numba=False):
         '''
         Evaluate the velocity map at position (x,y) in the given plane. Note
         that position must be defined in the same plane
 
+        theta: list of float, or dictionary
+            full parameters used for velocity calculation
+        plane: string
+            at which plane we evaluate the velocity
+        x, y: float mesh grid
+            the points where we evaluate velocity
         speed: bool
             Set to True to return speed map instead of velocity
         normalized: bool
@@ -138,14 +146,16 @@ class VelocityMap(TransformableImage):
             Set to True to use numba versions of transformations
         '''
         # parameters consistency check
-        if not isinstance(pars, (dict, list, np.ndarray)):
-            t = type(pars)
-            raise TypeError(f'pars must be a dict, list or numpy.ndarray,'+\
+        if not isinstance(theta, (dict, list, np.ndarray)):
+            t = type(theta)
+            raise TypeError(f'theta must be a dict, list or numpy.ndarray,'+\
                 f' not {t}!')
-        if use_numba and isinstance(pars, dict):
-            pars = self.model.sp.pars2theta(pars)
-        elif (not use_numba) and (isinstance(pars, (list, np.ndarray))):
-            pars = self.model.sp.theta2pars(pars)
+        # if use numba, transform parameters dict to list
+        if use_numba and isinstance(theta, dict):
+            theta = self.model.pars.pars2theta(theta)
+        # if not using numba, transform parameters list to dict
+        elif (not use_numba) and (isinstance(theta, (list, np.ndarray))):
+            theta = self.model.pars.theta2pars(theta)
         super(VelocityMap, self).__call__(plane, x, y, use_numba=use_numba)
 
         if normalized is True:
@@ -154,7 +164,7 @@ class VelocityMap(TransformableImage):
             norm = 1.
 
         return norm * self._eval_map_in_plane(
-            pars, plane, x, y, speed=speed, use_numba=use_numba
+            theta, plane, x, y, speed=speed, use_numba=use_numba
             )
 
     def _eval_map_in_plane(self, pars, plane, x, y, 

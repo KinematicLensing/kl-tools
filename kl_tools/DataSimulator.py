@@ -128,7 +128,7 @@ class DataSimulator():
             'r_unit': self.pars.meta['velocity']['r_unit'],
         }
         model_name = self.pars.meta['velocity']['model_name']
-        self.vmap = VelocityMap(model_name, self.pars.sampled, vmap_pars)
+        self.vmap = VelocityMap(model_name, self.pars, vmap_pars)
         return
 
     def _setup_imap(self):

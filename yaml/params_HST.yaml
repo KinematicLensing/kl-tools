@@ -1,13 +1,15 @@
-sampled_pars:
+dynamic_pars:
     g1:
         fid: 0.0
-        min: -1.0
-        max: 1.0
+        fixed: True
+        #min: -1.0
+        #max: 1.0
         order: 1
     g2:
         fid: 0.0
-        min: -1.0
-        max: 1.0
+        fixed: True
+        #min: -1.0
+        #max: 1.0
         order: 2
     theta_int:
         fid: 0.0
@@ -16,19 +18,19 @@ sampled_pars:
         order: 3
     sini:
         fid: 0.5
-        min: -1.0
+        min: 0.0
         max: 1.0
         order: 4
     v0:
         fid: 0.0
         mean: 0.0
-        std:  20.0
+        std:  50.0
         clip_sigmas: 10.0
         order: 5
     vcirc:
         fid: 200.0
         mean: 200.0
-        std: 10.0
+        std: 50.0
         clip_sigmas: 10.0
         order: 6
     rscale:

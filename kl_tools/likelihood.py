@@ -84,10 +84,18 @@ class LogBase(object):
         return self.parameters.sampled.pars_order
 
     def pars2theta(self, pars):
-        return self.sampled.pars2theta(pars)
+        """ parameters dict to theta list
+        This one is using the `Pars` object method, which will fill the fixed
+        parameters
+        """
+        return self.parameters.sampled.pars2theta(pars)
 
     def theta2pars(self, theta):
-        return self.sampled.theta2pars(theta)
+        """ theta list to parameters dict
+        This one is using the `Pars` object method, which will fill the fixed
+        parameters
+        """
+        return self.parameters.sampled.theta2pars(theta)
 
     @abstractmethod
     def __call__(self):
@@ -164,12 +172,17 @@ class LogPosterior_Roman(LogBase):
     def __init__(self, parameters, 
             datavector=None, covmat=None, fid_pars=None):
         '''
-        parameters: Pars
+        parameters: `Pars` object
             Pars instance that holds all parameters needed for MCMC
             run, including SampledPars and MetaPars
         datavector: DataCube, etc.
             Arbitrary data vector that subclasses from DataVector.
             If DataCube, truncated to desired lambda bounds
+
+        TODO: 
+            - build API such that people can choose sampled parameters
+            - support single-image inference
+            - check that subroutines do not call sampled_pars in Pars obj
         '''
 
         super(LogPosterior_Roman, self).__init__(parameters, DataVector())
@@ -178,7 +191,7 @@ class LogPosterior_Roman(LogBase):
         self.log_likelihood = LogLikelihood_Roman(parameters, 
             datavector=datavector, covmat=covmat, fid_pars=fid_pars)
 
-        self.ndims = len(parameters.sampled)
+        self.ndims = parameters.Nsampled
         self.nobs = self.log_likelihood.dsim.Nobs
 
         return
@@ -207,19 +220,18 @@ class LogPosterior_Roman(LogBase):
         sampler
 
         theta: list
-            Sampled parameters. Order defined in self.pars_order
-        data: DataCube, etc.
-            Arbitrary data vector. If DataCube, truncated
-            to desired lambda bounds
+            Sampled parameters. Relative order defined in self.pars_order
+            Note that some of the model parameters could be fixed, which are
+            not included here
         '''
-
+        theta_full = self.parameters.complete_sampled_theta(theta)
         logprior = self.log_prior(theta)
 
         if logprior == -np.inf:
             return -np.inf, self.blob(-np.inf, -np.inf)
 
         else:
-            loglikes = self.log_likelihood(theta)
+            loglikes = self.log_likelihood(theta_full)
 
         return logprior + np.sum(loglikes), self.blob(logprior, loglikes)
 
@@ -237,6 +249,9 @@ class LogPrior(LogBase):
         self.parameters = parameters
 
         self.priors = parameters.meta['priors']
+
+        assert len(self.priors)==self.parameters.Nsampled, 'Inconsistent '+\
+        'elements number between priors and parameters being sampled!'
 
         return
 

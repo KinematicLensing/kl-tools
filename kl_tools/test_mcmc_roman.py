@@ -68,12 +68,12 @@ def main(args, pool):
     ### ===============================
     # initialize parameters
     pars_from_yaml = Pars(yaml_file=pars_file)
-    truth = pars_from_yaml.sampled_fid
+    truth = pars_from_yaml.dynamic_fid
     true_pars = pars_from_yaml.theta2pars(truth)
     # initialize likelihood
     # the data vector will be generated from `fid_pars`
     logprob = LogPosterior_Roman(pars_from_yaml, 
-        fid_pars=pars_from_yaml.sampled_fid)
+        fid_pars=pars_from_yaml.dynamic_fid)
 
     ### Print fiducial data for debug
     ### =============================
@@ -188,13 +188,13 @@ def main(args, pool):
     outfile = os.path.join(outdir, 'test-mcmc-truth.pkl')
     print(f'Pickling truth to {outfile}')
     with open(outfile, 'wb') as f:
-        pickle.dump(pars_from_yaml.sampled_fid, f)
+        pickle.dump(pars_from_yaml.dynamic_fid, f)
     
     # >>> chain traces
     outfile = os.path.join(outdir, 'chains.png')
     print(f'Saving chain plots to {outfile}')
-    #reference = pars.pars2theta(pars_from_yaml.sampled_fid)
-    reference = truth
+    #reference = pars.pars2theta(pars_from_yaml.dynamic_fid)
+    reference = pars_from_yaml.sampled_fid
     runner.plot_chains(
         outfile=outfile, reference=reference, show=show
         )
@@ -204,13 +204,13 @@ def main(args, pool):
     print(f'Saving corner plot to {outfile}')
     title = 'Reference lines are param truth values'
     runner.plot_corner(
-        outfile=outfile, reference=truth, title=title, show=show
+        outfile=outfile, reference=reference, title=title, show=show
         )
     
     # >>> Sanity check on MAP
     runner.compute_MAP()
     map_medians = runner.MAP_medians
-    map_medians_pars = pars_from_yaml.theta2pars(map_medians)
+    map_medians_pars = pars_from_yaml.sampled_theta_2_dynamic_pars(map_medians)
     print('(median) MAP values:')
     for name, val in map_medians_pars.items():
         print(f'{name}: {val:.4f}')
