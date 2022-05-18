@@ -29,9 +29,11 @@ dynamic_pars:
         order: 5
     vcirc:
         fid: 300.0
-        mean: 300.0
-        std: 100.0
-        clip_sigmas: 3.0
+        min: 10.0
+        max: 1000.0
+        #mean: 300.0
+        #std: 100.0
+        #clip_sigmas: 3.0
         order: 6
     rscale:
         fid: 0.4
