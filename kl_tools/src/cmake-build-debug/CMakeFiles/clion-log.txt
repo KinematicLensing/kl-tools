@@ -1,0 +1,5 @@
+/home/jiachuan/.cache/JetBrains/RemoteDev/dist/be49d4c4c1437_CLion-2022.1.1/bin/cmake/linux/bin/cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_MAKE_PROGRAM=/home/jiachuan/.cache/JetBrains/RemoteDev/dist/be49d4c4c1437_CLion-2022.1.1/bin/ninja/linux/ninja -G Ninja -S /home/jiachuan/kl-tools/kl_tools/src -B /home/jiachuan/kl-tools/kl_tools/src/cmake-build-debug
+-- pybind11 v2.9.2 
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/jiachuan/kl-tools/kl_tools/src/cmake-build-debug
