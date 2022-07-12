@@ -28,6 +28,7 @@ from likelihood import LogPosterior_Roman
 from velocity import VelocityMap
 
 import pudb
+from viztracer import VizTracer
 
 parser = ArgumentParser()
 
@@ -50,7 +51,10 @@ group.add_argument('--mpi', dest='mpi', default=False, action='store_true',
                    help='Run with MPI.')
 
 def main(args, pool):
-
+    
+    tracer = VizTracer(min_duration=20)
+    tracer.start()
+    
     nsteps = args.nsteps
     sampler = args.sampler
     ncores = args.ncores
@@ -278,6 +282,10 @@ def main(args, pool):
         plt.show()
     else:
         plt.close()
+
+    tracer.stop()
+    tracer.save()
+
     return 0
 
 if __name__ == '__main__':
