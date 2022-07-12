@@ -775,8 +775,7 @@ class LogLikelihood_Roman(LogBase):
         '''
         _invcov_list = []
         for cov in self.covariance:
-            _invcov = np.ones(cov.shape)
-            _invcov *= 1.0/np.var(cov)
+            _invcov = 1.0 / cov**2
             _invcov_list.append(_invcov)
         self.invcov = _invcov_list
 
