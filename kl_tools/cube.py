@@ -386,6 +386,7 @@ class GrismGenerator(DataVector):
         assert (status == 0), "ERROR: cpp extension set_pars() failed!"
         if print_cpp_pars:
             m.print_Pars()
+        print("----- %s seconds -----" % (time() - start_time))
         # wrap input arrays to C++ STL vector<double> object
         theory_data_DBVec = m.DBVec(theory_data.flatten())
         lambdas_DBVec = m.DBVec(lambdas.flatten())
