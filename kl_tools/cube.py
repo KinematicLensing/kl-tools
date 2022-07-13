@@ -325,7 +325,10 @@ class GrismGenerator(DataVector):
         # convolve with achromatic psf, if required
         if self.hasPSF and not self.hasChromaticPSF:
             psf = self._build_PSF_model()
-            grism_img = gs.Convolve([grism_img, psf])
+            _gal = gs.InterpolatedImage(grism_img, scale=self.pix_scale)
+            grism_gal = gs.Convolve([_gal, psf])
+            grism_img = grism_gal.drawImage(nx=self.Nx, ny=self.Ny, 
+                                            scale=self.pix_scale)
 
         # apply noise
         if force_noise_free:
