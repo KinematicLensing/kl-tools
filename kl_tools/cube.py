@@ -1,7 +1,6 @@
 from abc import abstractmethod
 import numpy as np
 from astropy.io import fits
-import galsim
 import os
 import pickle
 from astropy.table import Table
@@ -15,6 +14,9 @@ from time import time
 from parameters import Pars
 
 import pudb
+
+# import cpp extension
+import kltools_grism_module as m
 
 parser = ArgumentParser()
 
@@ -347,10 +349,13 @@ class GrismGenerator(DataVector):
                 #print("[GrismGenerator][debug]: noise free")
                 return grism_img.array, noise_img.array
 
-    def cpp_stack(self, theory_data, lambdas, force_noise_free = False):
+    def cpp_stack(self, theory_data, lambdas, force_noise_free = False,
+                print_cpp_pars = False):
         """ Generate simulated grism image out of theory 3d model cube
             But with CPP implementation
             
+        Note: this method does not support wavelength-dependent PSF!
+
         Inputs:
         =======
         theory_data: 3d (Nspec_theory, Ny_theory, Nx_theory) numpy.ndarray
@@ -366,6 +371,57 @@ class GrismGenerator(DataVector):
             the 2d image noise
 
         """
+        if not isinstance(theory_data, np.ndarray):
+            raise TypeError(f'theory_data must be numpy.ndarray object!')
+        if theory_data.shape[0] != lambdas.shape[0]:
+            raise ValueError(f'theory_data and lambdas must have the same'+\
+                ' dimension in along axis 0')
+        # prepare for the cpp routine
+        status = m.set_pars(
+            self.Nx_theory, self.Ny_theory, lambdas.shape[0], self.scale,
+            self.Nx, self.Ny, self.pix_scale, self.R_spec, self.disp_ang,
+            self.offset, self.diameter, self.exp_time, self.gain)
+        assert (status == 0), "ERROR: cpp extension set_pars() failed!"
+        if print_cpp_pars:
+            m.print_Pars()
+        # wrap input arrays to C++ STL vector<double> object
+        theory_data_DBVec = m.DBVec(theory_data.flatten())
+        lambdas_DBVec = m.DBVec(lambdas.flatten())
+        bandpasses_DBVec = m.DBVec(self.bandpass(lambdas).flatten())
+        grism_img_DBVec = m.DBVec(np.zeros([self.Ny, self.Nx]).flatten())
+        status = m.stack(theory_data_DBVec, lambdas_DBVec, bandpasses_DBVec, 
+            grism_img_DBVec)
+        assert (status == 0), "ERROR: cpp extension stack() failed!"
+        # wrap dispersed image vector<double> to galsim.Image object
+        grism_img = gs.Image(
+            np.array(grism_img_DBVec).reshape([self.Ny, self.Nx]),
+            dtype = np.float64, scale=self.pix_scale, 
+            )
+
+        # convolve with achromatic psf, if required
+        if self.hasPSF and not self.hasChromaticPSF:
+            psf = self._build_PSF_model()
+            _gal = gs.InterpolatedImage(grism_img, scale=self.pix_scale)
+            grism_gal = gs.Convolve([_gal, psf])
+            grism_img = grism_gal.drawImage(nx=self.Nx, ny=self.Ny, 
+                                            scale=self.pix_scale)
+
+        # apply noise
+        if force_noise_free:
+            return grism_img.array, None
+        else:
+            noise = self._getNoise()
+            grism_img_withNoise = grism_img.copy()
+            grism_img_withNoise.addNoise(noise)
+            noise_img = grism_img_withNoise - grism_img
+            assert (grism_img_withNoise.array is not None), "Null grism data"
+            assert (grism_img.array is not None), "Null grism data"
+            if self.apply_to_data:
+                #print("[GrismGenerator][debug]: add noise")
+                return grism_img_withNoise.array, noise_img.array
+            else:
+                #print("[GrismGenerator][debug]: noise free")
+                return grism_img.array, noise_img.array
 
     def _disperse(self, theory_slice, lambdas):
         ''' Disperse a single slice of theory 3d model cube
