@@ -50,6 +50,10 @@ typedef struct {
     double R_spec;
     double disper_angle;
     double offset;
+    // exposure time calculation
+    double diameter_in_cm;
+    double exptime_in_sec;
+    double gain;
 } Pars;
 Pars pars = {.theory_cube_Nx = 0,
              .theory_cube_Ny = 0,
@@ -60,12 +64,16 @@ Pars pars = {.theory_cube_Nx = 0,
              .observed_image_scale = 0.0,
              .R_spec = 0.0,
              .disper_angle = 0.0,
-             .offset = 0.0};
+             .offset = 0.0,
+             .diameter_in_cm = 0.0,
+             .exptime_in_sec = 0.0,
+             .gain = 0.0};
 
-int cpp_init_pars(int theory_cube_Nx, int theory_cube_Ny, int theory_cube_Nlam,
+int cpp_set_pars(int theory_cube_Nx, int theory_cube_Ny, int theory_cube_Nlam,
                    double theory_cube_scale, int observed_image_Nx,
                    int observed_image_Ny, double observed_image_scale,
-                   double R_spec, double disper_angle, double offset)
+                   double R_spec, double disper_angle, double offset,
+                   double diameter_in_cm, double exptime_in_sec, double gain)
 {
     pars.theory_cube_Nx = theory_cube_Nx;
     pars.theory_cube_Ny = theory_cube_Ny;
@@ -77,6 +85,9 @@ int cpp_init_pars(int theory_cube_Nx, int theory_cube_Ny, int theory_cube_Nlam,
     pars.R_spec = R_spec;
     pars.disper_angle = disper_angle;
     pars.offset = offset;
+    pars.diameter_in_cm = diameter_in_cm;
+    pars.exptime_in_sec = exptime_in_sec;
+    pars.gain = gain;
 
     return 0;
 }
@@ -94,6 +105,9 @@ int cpp_print_Pars()
     cout << "\t - R_spec = " << pars.R_spec << endl;
     cout << "\t - disper_angle = " << pars.disper_angle << endl;
     cout << "\t - offset = " << pars.offset << endl;
+    cout << "\t - diameter [cm] = " << pars.diameter_in_cm << endl;
+    cout << "\t - exptime [sec] = " << pars.exptime_in_sec << endl;
+    cout << "\t - gain = " << pars.gain << endl;
 
     return 0;
 }
@@ -134,7 +148,7 @@ double obs2theory_arcsec(double center, int edge, double shift_in_pix,
  * Inputs:
  *      theory_data: the 3D model cube of dimension
  *          (Nlam_theory, Ny_theory, Nx_theory). It contains the intensity
- *          distribution $f_\lambda$
+ *          distribution, in units of [photons/s/cm2]
  *      lambdas: the 2D array of dimension (Nlam_theory, 2), recording the
  *          wavelength edge of each model slice.
  *      bandpasses: the 2D array of dimension (Nlam_theory, 2), recording the
@@ -152,47 +166,50 @@ int cpp_stack(const vector<double> &theory_data, const vector<double> &lambdas,
   // init coordinates
   // Note that those coordinates are static variables to save computation time.
   // theory model cube
-  static double Rx_theory = (int)(pars.theory_cube_Nx/2) - \
+  double Rx_theory = (int)(pars.theory_cube_Nx/2) - \
                             0.5 * ((pars.theory_cube_Nx - 1) % 2);
-  static double Ry_theory = (int)(pars.theory_cube_Ny/2) - \
+  double Ry_theory = (int)(pars.theory_cube_Ny/2) - \
                             0.5 * ((pars.theory_cube_Ny - 1) % 2);
-  static vector<double> origin_Xgrid(pars.theory_cube_Nx, 0.0);
-  static vector<double> origin_Ygrid(pars.theory_cube_Ny, 0.0);
-  cout << "Rx_theory = " << Rx_theory << endl;
-  cout << "Init X grid (theory cube): " << endl;
+  vector<double> origin_Xgrid(pars.theory_cube_Nx, 0.0);
+  vector<double> origin_Ygrid(pars.theory_cube_Ny, 0.0);
+  //cout << "Rx_theory = " << Rx_theory << endl;
+  //cout << "Init X grid (theory cube): " << endl;
   for(i=0; i<pars.theory_cube_Nx; i++){
     origin_Xgrid[i] = (i - Rx_theory) * pars.theory_cube_scale;
-    cout << origin_Xgrid[i] << " ";
+    //cout << origin_Xgrid[i] << " ";
   }
-  cout << endl;
-  cout << "Init Y grid (theory cube): " << endl;
+  //cout << endl;
+  //cout << "Init Y grid (theory cube): " << endl;
   for(i=0; i<pars.theory_cube_Ny; i++){
     origin_Ygrid[i] = (i - Ry_theory) * pars.theory_cube_scale;
-    cout << origin_Ygrid[i] << " ";
+    //cout << origin_Ygrid[i] << " ";
   }
-  cout << endl;
-  static double ob_x = origin_Xgrid[0] - 0.5*pars.theory_cube_scale;
-  static double ob_y = origin_Ygrid[0] - 0.5*pars.theory_cube_scale;
-  cout << "corner of the theory cube frame: "<< ob_x << ob_y << endl;
+  //cout << endl;
+  double ob_x = origin_Xgrid[0] - 0.5*pars.theory_cube_scale;
+  double ob_y = origin_Ygrid[0] - 0.5*pars.theory_cube_scale;
+  //cout << "corner of the theory cube frame: "<< ob_x << ob_y << endl;
   // observed image
-  static double Rx = (int)(pars.observed_image_Nx/2) - \
+  double Rx = (int)(pars.observed_image_Nx/2) - \
                       0.5 * ((pars.observed_image_Nx - 1) % 2);
-  static double Ry = (int)(pars.observed_image_Ny/2) - \
+  double Ry = (int)(pars.observed_image_Ny/2) - \
                       0.5 * ((pars.observed_image_Ny - 1) % 2);
-  static vector<double> target_Xgrid(pars.observed_image_Nx, 0.0);
-  static vector<double> target_Ygrid(pars.observed_image_Ny, 0.0);
-  cout << "Rs_obs = " << Rx << endl;
-  cout << "Init X grid (observed image): " << endl;
+  vector<double> target_Xgrid(pars.observed_image_Nx, 0.0);
+  vector<double> target_Ygrid(pars.observed_image_Ny, 0.0);
+  //cout << "Rs_obs = " << Rx << endl;
+  //cout << "Init X grid (observed image): " << endl;
   for(i=0; i<pars.observed_image_Nx; i++){
     target_Xgrid[i] = (i - Rx) * pars.observed_image_scale;
-    cout << target_Xgrid[i] << " ";
+    //cout << target_Xgrid[i] << " ";
   }
-  cout << endl << "Init Y grid (observed image): " << endl;
+  //cout << endl << "Init Y grid (observed image): " << endl;
   for(i=0; i<pars.observed_image_Ny; i++){
     target_Ygrid[i] = (i - Ry) * pars.observed_image_scale;
-    cout << target_Ygrid[i] << " ";
+    //cout << target_Ygrid[i] << " ";
   }
-  cout << endl;
+  //cout << endl;
+  // exptime calculation
+  double flux_scale = PI*pow((pars.diameter_in_cm/2.0), 2)*\
+                      pars.exptime_in_sec/pars.gain;
 
   // init dispersed_data
   for(double & it : dispersed_data){it = 0.0;}
@@ -202,14 +219,14 @@ int cpp_stack(const vector<double> &theory_data, const vector<double> &lambdas,
     double blue_limit = lambdas[2*i+0];
     double red_limit = lambdas[2*i+1];
     double mean_wave = (blue_limit + red_limit)/2.;
-    double dlam = red_limit - blue_limit;
+    // double dlam = red_limit - blue_limit;
     // take the linear average of the bandpass.
     // Note that this only works when the lambda grid is fine enough.
     double mean_bp = (bandpasses[2*i+0] + bandpasses[2*i+1])/2.0;
     // for each slice, disperse & interpolate
     cpp_dispersion_relation(mean_wave, shift);
-    cout << "slice " << i << " shift = (" << shift[0] << ", " << shift[1] << \
-      ")" << "mean wavelength = " << mean_wave << endl;
+    //cout << "slice " << i << " shift = (" << shift[0] << ", " << shift[1] << \
+    //  ")" << "mean wavelength = " << mean_wave << endl;
     // loop through the dispersed image
     for(j=0; j<pars.observed_image_Ny; j++){
       for(k=0; k<pars.observed_image_Nx; k++){
@@ -266,7 +283,7 @@ int cpp_stack(const vector<double> &theory_data, const vector<double> &lambdas,
                  theory_data[idx3(i,pars.theory_cube_Nlam,\
                                   _k,pars.theory_cube_Ny,\
                                   _l,pars.theory_cube_Nx)] * \
-                                  x_weight[q] * y_weight[p] * mean_bp;
+                                  x_weight[q]*y_weight[p]*mean_bp*flux_scale;
             }
           }
         }
@@ -285,7 +302,7 @@ PYBIND11_MODULE(kltools_grism_module, m) {
 
   m.doc() = "cpp grism module"; // optional module docstring
 
-  m.def("init_pars", &cpp_init_pars, "A function that init Pars struct");
+  m.def("set_pars", &cpp_set_pars, "A function that set Pars struct");
 
   m.def("print_Pars", &cpp_print_Pars, "A function that print Pars struct");
 
