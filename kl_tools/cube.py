@@ -344,6 +344,26 @@ class GrismGenerator(DataVector):
                 #print("[GrismGenerator][debug]: noise free")
                 return grism_img.array, noise_img.array
 
+    def cpp_stack(self, theory_data, lambdas, force_noise_free = False):
+        """ Generate simulated grism image out of theory 3d model cube
+            But with CPP implementation
+            
+        Inputs:
+        =======
+        theory_data: 3d (Nspec_theory, Ny_theory, Nx_theory) numpy.ndarray
+            the 3d intensity distribution
+        lambdas: 1d (Nspec) list of two-elements tuple
+            the blue and red limits of each theory cube slice
+
+        Outputs:
+        ========
+        data: 2d (Ny, Nx) numpy.ndarray
+            the 2d stacked image
+        noise: 2d (Ny, Nx) numpy.ndarray
+            the 2d image noise
+
+        """
+
     def _disperse(self, theory_slice, lambdas):
         ''' Disperse a single slice of theory 3d model cube
 
