@@ -372,7 +372,7 @@ class GrismGenerator(DataVector):
             the 2d image noise
 
         """
-        start_time = time.time()
+        start_time = time()
         if not isinstance(theory_data, np.ndarray):
             raise TypeError(f'theory_data must be numpy.ndarray object!')
         if theory_data.shape[0] != lambdas.shape[0]:
@@ -386,22 +386,23 @@ class GrismGenerator(DataVector):
         assert (status == 0), "ERROR: cpp extension set_pars() failed!"
         if print_cpp_pars:
             m.print_Pars()
+        print("----- %s seconds -----" % (time() - start_time))
         # wrap input arrays to C++ STL vector<double> object
         theory_data_DBVec = m.DBVec(theory_data.flatten())
         lambdas_DBVec = m.DBVec(lambdas.flatten())
         bandpasses_DBVec = m.DBVec(self.bandpass(lambdas).flatten())
         grism_img_DBVec = m.DBVec(np.zeros([self.Ny, self.Nx]).flatten())
-        print("----- %s seconds -----" % (time.time() - start_time))
+        print("----- %s seconds -----" % (time() - start_time))
         status = m.stack(theory_data_DBVec, lambdas_DBVec, bandpasses_DBVec, 
             grism_img_DBVec)
-        print("----- %s seconds -----" % (time.time() - start_time))
+        print("----- %s seconds -----" % (time() - start_time))
         assert (status == 0), "ERROR: cpp extension stack() failed!"
         # wrap dispersed image vector<double> to galsim.Image object
         grism_img = gs.Image(
             np.array(grism_img_DBVec).reshape([self.Ny, self.Nx]),
             dtype = np.float64, scale=self.pix_scale, 
             )
-        print("----- %s seconds -----" % (time.time() - start_time))
+        print("----- %s seconds -----" % (time() - start_time))
         # convolve with achromatic psf, if required
         if self.hasPSF and not self.hasChromaticPSF:
             psf = self._build_PSF_model()
@@ -409,7 +410,7 @@ class GrismGenerator(DataVector):
             grism_gal = gs.Convolve([_gal, psf])
             grism_img = grism_gal.drawImage(nx=self.Nx, ny=self.Ny, 
                                             scale=self.pix_scale)
-        print("----- %s seconds -----" % (time.time() - start_time))
+        print("----- %s seconds -----" % (time() - start_time))
         # apply noise
         if force_noise_free:
             return grism_img.array, None
@@ -420,7 +421,7 @@ class GrismGenerator(DataVector):
             noise_img = grism_img_withNoise - grism_img
             assert (grism_img_withNoise.array is not None), "Null grism data"
             assert (grism_img.array is not None), "Null grism data"
-            print("----- %s seconds -----" % (time.time() - start_time))
+            print("----- %s seconds -----" % (time() - start_time))
             if self.apply_to_data:
                 #print("[GrismGenerator][debug]: add noise")
                 return grism_img_withNoise.array, noise_img.array
