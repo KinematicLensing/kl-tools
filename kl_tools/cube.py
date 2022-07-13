@@ -452,12 +452,15 @@ class GrismGenerator(DataVector):
         # Note: shift = (dx, dy)
         shift = self.dispersion_relation((lambdas[0]+lambdas[1])/2.)
         # draw slice image
+        # WARNING: the kwd `bandpass` of InclinedExp object is not working
+        # You have to apply the bandpass manually!
         _grism = _gal.drawImage(nx=self.Nx, ny=self.Ny, scale=self.pix_scale,
                                 method='auto', area=self.area, 
                                 exptime=self.exp_time, gain=self.gain, 
                                 offset=shift,
                                 bandpass=slice_bandpass)
-        return _grism
+        mean_bp = (self.bandpass(lambdas[0])+self.bandpass(lambdas[1]))/2.
+        return _grism * mean_bp
 
     def _init_dispersion_relation(self):
         ''' Initialize Grism dispersion relation
