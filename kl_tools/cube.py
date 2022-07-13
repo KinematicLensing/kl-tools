@@ -388,18 +388,23 @@ class GrismGenerator(DataVector):
             m.print_Pars()
         print("----- %s seconds -----" % (time() - start_time))
         # wrap input arrays to C++ STL vector<double> object
-        theory_data_DBVec = m.DBVec(theory_data.flatten())
-        lambdas_DBVec = m.DBVec(lambdas.flatten())
-        bandpasses_DBVec = m.DBVec(self.bandpass(lambdas).flatten())
-        grism_img_DBVec = m.DBVec(np.zeros([self.Ny, self.Nx]).flatten())
+        #theory_data_DBVec = m.DBVec(theory_data.flatten())
+        #lambdas_DBVec = m.DBVec(lambdas.flatten())
+        #bandpasses_DBVec = m.DBVec(self.bandpass(lambdas).flatten())
+        #grism_img_DBVec = m.DBVec(np.zeros([self.Ny, self.Nx]).flatten())
+        bandpasses = self.bandpass(lambdas)
+        grism_img_array = np.zeros([self.Ny, self.Nx], 
+            dtype=np.float64, order='C')
         print("----- %s seconds -----" % (time() - start_time))
-        status = m.stack(theory_data_DBVec, lambdas_DBVec, bandpasses_DBVec, 
-            grism_img_DBVec)
+        #status = m.stack(theory_data_DBVec, lambdas_DBVec, bandpasses_DBVec, 
+        #    grism_img_DBVec)
+        status = m.stack(theory_data, lambdas, bandpasses, grism_img_array)
         print("----- %s seconds -----" % (time() - start_time))
         assert (status == 0), "ERROR: cpp extension stack() failed!"
         # wrap dispersed image vector<double> to galsim.Image object
         grism_img = gs.Image(
-            np.array(grism_img_DBVec).reshape([self.Ny, self.Nx]),
+            #np.array(grism_img_DBVec).reshape([self.Ny, self.Nx]),
+            grism_img_array,
             dtype = np.float64, scale=self.pix_scale, 
             )
         print("----- %s seconds -----" % (time() - start_time))
