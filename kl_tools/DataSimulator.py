@@ -201,7 +201,8 @@ class DataSimulator():
 
         return
 
-    def evaluateSimulatedData(self, theta, force_noise_free = False):
+    def evaluateSimulatedData(self, theta, force_noise_free = False,
+        use_grism_cpp = True):
         datavector = []
         covariance = []
         self.evaluateTheoryModel(theta)
@@ -209,7 +210,12 @@ class DataSimulator():
 
         for _ds in self.data_generators:
             if _ds.TYPE == 'grism':
-                _img, _cov = _ds.stack(
+                if not use_grism_cpp:
+                    _img, _cov = _ds.stack(
+                    self._data, self.lambdas, force_noise_free
+                    )
+                else:
+                    _img, _cov = _ds.cpp_stack(
                     self._data, self.lambdas, force_noise_free
                     )
             elif _ds.TYPE == 'photometry':
