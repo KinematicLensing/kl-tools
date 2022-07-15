@@ -36,7 +36,7 @@ dynamic_pars:
         clip_sigmas: 5.0
         order: 6
     rscale:
-        fid: 0.25
+        fid: 0.5
         min: 0.0
         max: 2.0
         order: 7
@@ -49,9 +49,9 @@ dynamic_pars:
 # this meta-grid, then observed data will be interpolated from that. 
 
 model_dimension:
-    Nx: 64
-    Ny: 64
-    scale: 0.05 # arcsec
+    Nx: 200
+    Ny: 200
+    scale: 0.016 # arcsec
     lambda_range: [1236.6, 1325.1] # 1190-1370
     lambda_res: 0.05 # nm
     lambda_unit: nm
@@ -60,7 +60,7 @@ model_dimension:
 
 intensity:
     type: inclined_exp
-    hlr: 0.25 # arcsec
+    hlr: 0.5 # arcsec
 
 # kinematics model for the galaxy
 
@@ -110,7 +110,7 @@ observations:
         pixel_scale: 0.065 # arcsec
         R_spec: 215 # at 1 micron
         # can be 'airy'/'moffat'/'kolmogorov'/'vonkarman'/'opticalpsf'
-        psf_type: airy
+        psf_type: none
         # pass the needed params to build PSF model here
         # in case of airy, we don't need any params
         psf_kwargs:
@@ -134,7 +134,7 @@ observations:
         Ny: 38
         pixel_scale: 0.065      # arcsec
         R_spec:  215          # at 1 micron
-        psf_type: airy
+        psf_type: none
         psf_kwargs: 
             fwhm: 0.13     # arcsec
         disp_ang: 1.57  # radian
