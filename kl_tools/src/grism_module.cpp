@@ -8,6 +8,8 @@
 #include <time.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
+#include <pybind11/numpy.h>
+
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
 
@@ -145,6 +147,15 @@ double obs2theory_arcsec(double center, int edge, double shift_in_pix,
 }
 /* Generate simulated grism image out of theory 3d model cube, but with CPP
  * implementation.
+ *
+ * THOUGHTS:
+ *      As long as the dispersion relation is not changed and the theory_cube,
+ *      lambdas, bandpass and image grid are the same, you can init the pixel
+ *      response as a sparse matrix at the beginning, then during the MCMC
+ *      sampling, you only need to distribute the updated theory_cube into the
+ *      dispersed image according to this pixel response. This pixel response
+ *      can include chromatic PSF.
+ *
  * Inputs:
  *      theory_data: the 3D model cube of dimension
  *          (Nlam_theory, Ny_theory, Nx_theory). It contains the intensity
@@ -157,12 +168,43 @@ double obs2theory_arcsec(double center, int edge, double shift_in_pix,
  *      dispersed_data: the 2D image stamp of dimension (Ny, Nx) after
  *          dispersing the 3D cube to a 2D (observed) image grid.
  * */
-int cpp_stack(const vector<double> &theory_data, const vector<double> &lambdas,
-              const vector<double> &bandpasses, vector<double> &dispersed_data)
+int cpp_stack(
+  const py::array_t<double, py::array::c_style | py::array::forcecast> theory_data,
+  const py::array_t<double, py::array::c_style | py::array::forcecast> lambdas,
+  const py::array_t<double, py::array::c_style | py::array::forcecast> bandpasses,
+  py::array_t<double, py::array::c_style | py::array::forcecast> dispersed_data)
 {
   int i,j,k;
   double l,r,t,b,lb,rb,tb,bb;
   int li,ri,ti,bi;
+  // sanity check
+  py::buffer_info buf_td = theory_data.request();
+  py::buffer_info buf_l = lambdas.request();
+  py::buffer_info buf_bp = bandpasses.request();
+  py::buffer_info buf_dd = dispersed_data.request();
+
+  if(buf_td.ndim != 3)
+    throw runtime_error("`theory_data` dimension must be 3!");
+  if(buf_l.ndim != 2)
+    throw runtime_error("`lambdas` dimension must be 2!");
+  if(buf_bp.ndim != 2)
+    throw runtime_error("`bandpasses` dimension must be 2!");
+  if (buf_dd.ndim != 2)
+    throw runtime_error("`dispersed_data` dimension must be 2!");
+  if( (buf_td.shape[0] != buf_l.shape[0]) || \
+      (buf_td.shape[0] != buf_bp.shape[0]) || \
+      (buf_td.shape[0] != pars.theory_cube_Nlam))
+    throw runtime_error("`theory_data`, `lambdas` and `bandpasses` must have the same Nlam!");
+  if((buf_td.shape[1] != pars.theory_cube_Ny) || (buf_td.shape[2] != pars.theory_cube_Nx))
+    throw runtime_error("`theory_data` dimension wrong!");
+  if(buf_dd.shape[0] != pars.observed_image_Ny || buf_dd.shape[1] != pars.observed_image_Nx)
+    throw runtime_error("`dispersed_data` dimension wrong!");
+  // get pointer to the buffer data memory
+  auto *ptr_td = static_cast<double *>(buf_td.ptr);
+  auto *ptr_l = static_cast<double *>(buf_l.ptr);
+  auto *ptr_bp = static_cast<double *>(buf_bp.ptr);
+  auto *ptr_dd = static_cast<double *>(buf_dd.ptr);
+
   // init coordinates
   // Note that those coordinates are static variables to save computation time.
   // theory model cube
@@ -212,17 +254,18 @@ int cpp_stack(const vector<double> &theory_data, const vector<double> &lambdas,
                       pars.exptime_in_sec/pars.gain;
 
   // init dispersed_data
-  for(double & it : dispersed_data){it = 0.0;}
+  for(size_t index = 0; index < buf_dd.size; index++){ptr_dd[index] = 0.0;}
   // looping through theory data cube
   for (i=0; i<pars.theory_cube_Nlam; i++){
     vector<double> shift{0.0, 0.0}; // in units of pixel
-    double blue_limit = lambdas[2*i+0];
-    double red_limit = lambdas[2*i+1];
+    double blue_limit = ptr_l[2*i+0];
+    double red_limit = ptr_l[2*i+1];
     double mean_wave = (blue_limit + red_limit)/2.;
     // double dlam = red_limit - blue_limit;
     // take the linear average of the bandpass.
     // Note that this only works when the lambda grid is fine enough.
-    double mean_bp = (bandpasses[2*i+0] + bandpasses[2*i+1])/2.0;
+    //double mean_bp = (bandpasses[2*i+0] + bandpasses[2*i+1])/2.0;
+    double mean_bp = (ptr_bp[2*i+0] + ptr_bp[2*i+1])/2.0;
     // for each slice, disperse & interpolate
     cpp_dispersion_relation(mean_wave, shift);
     //cout << "slice " << i << " shift = (" << shift[0] << ", " << shift[1] << \
@@ -278,12 +321,10 @@ int cpp_stack(const vector<double> &theory_data, const vector<double> &lambdas,
             {
               int _k = p + bi;
               int _l = q + li;
-              dispersed_data[idx2(j,pars.observed_image_Ny,
-                                  k,pars.observed_image_Nx)] += \
-                 theory_data[idx3(i,pars.theory_cube_Nlam,\
-                                  _k,pars.theory_cube_Ny,\
-                                  _l,pars.theory_cube_Nx)] * \
-                                  x_weight[q]*y_weight[p]*mean_bp*flux_scale;
+              size_t dd_id = dispersed_data.index_at(j,k);
+              size_t td_id = theory_data.index_at(i,_k,_l);
+              ptr_dd[dd_id] += ptr_td[td_id] * \
+                x_weight[q]*y_weight[p]*mean_bp*flux_scale;
             }
           }
         }
@@ -292,6 +333,43 @@ int cpp_stack(const vector<double> &theory_data, const vector<double> &lambdas,
     }
   }
   return 0;
+}
+
+void cpp_test_numpy_3d_array(
+        py::array_t<double, py::array::c_style | py::array::forcecast> array)
+{
+  // play with NumPy array
+  //cout << "First element of the array " << array[0] << endl;
+  cout << "gets the count from the beginning to a given index: ";
+  cout << array.index_at(1,1,1) << endl;
+  // try access with buffer
+  py::buffer_info buf = array.request();
+  cout << "Buffer ndim = " << buf.ndim << endl;
+  if(buf.ndim != 3)
+    throw runtime_error("Number of dimension must be three!");
+  cout << "Buffer size = " << buf.size << endl;
+  cout << "Buffer shape = ";
+  for (auto i: buf.shape)
+    cout << i << ' ';
+  cout << endl;
+  cout << "Buffer format descriptor = " << buf.format << endl;
+  cout << "Buffer strides = ";
+  for (auto i: buf.strides)
+    cout << i << " ";
+  cout << endl;
+  cout << "iterating using buffer ptr" << endl;
+  auto *ptr = static_cast<double *>(buf.ptr);
+  size_t index = 0;
+  for(size_t i = 0; i < buf.shape[0]; i++) {
+    for (size_t j = 0; j < buf.shape[1]; j++) {
+      for (size_t k = 0; k < buf.shape[2]; k++) {
+        //cout << ptr[index] << " ";
+        ptr[index] = -1 * ptr[index];
+        index++;
+      }
+    }
+  }
+  cout << endl;
 }
 
 /* PYBIND11 Python Wrapper
@@ -308,6 +386,9 @@ PYBIND11_MODULE(kltools_grism_module, m) {
 
   m.def("stack", &cpp_stack,
         "A function that disperse and stack the theory model cube");
+
+  m.def("test_numpy_3d_array", &cpp_test_numpy_3d_array,
+        "A function that test the usage of NumPy array interface");
 
   #ifdef VERSION_INFO
   m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
