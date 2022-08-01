@@ -216,7 +216,8 @@ class DataSimulator():
                     )
                 else:
                     _img, _cov = _ds.cpp_stack(
-                    self._data, self.lambdas, force_noise_free
+                    self._data, self.lambdas, force_noise_free,
+                    print_cpp_pars = True
                     )
             elif _ds.TYPE == 'photometry':
                 assert (self.gal is not None), "galaxy model missing!"

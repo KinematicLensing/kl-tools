@@ -110,7 +110,7 @@ observations:
         pixel_scale: 0.065 # arcsec
         R_spec: 215 # at 1 micron
         # can be 'airy'/'moffat'/'kolmogorov'/'vonkarman'/'opticalpsf'
-        psf_type: none
+        psf_type: airy_mean
         # pass the needed params to build PSF model here
         # in case of airy, we don't need any params
         psf_kwargs:
@@ -134,7 +134,7 @@ observations:
         Ny: 38
         pixel_scale: 0.065      # arcsec
         R_spec:  215          # at 1 micron
-        psf_type: none
+        psf_type: airy_mean
         psf_kwargs: 
             fwhm: 0.13     # arcsec
         disp_ang: 1.57  # radian

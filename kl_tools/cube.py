@@ -332,10 +332,10 @@ class GrismGenerator(DataVector):
         grism_img = np.sum(_grism_list, axis=0)
         # convolve with achromatic psf, if required
         if self.hasPSF and not self.hasChromaticPSF:
-            _kwargs = {}
             if self.psf_type == 'airy_mean':
-                _kwargs['lam_mean'] = np.mean(lambdas)
-            psf = self._build_PSF_model(_kwargs)
+                psf = self._build_PSF_model(lam_mean=np.mean(lambdas))
+            else:
+                psf = self._build_PSF_model()
             _gal = gs.InterpolatedImage(grism_img, scale=self.pix_scale)
             grism_gal = gs.Convolve([_gal, psf])
             grism_img = grism_gal.drawImage(nx=self.Nx, ny=self.Ny, 
@@ -394,39 +394,31 @@ class GrismGenerator(DataVector):
         assert (status == 0), "ERROR: cpp extension set_pars() failed!"
         if print_cpp_pars:
             m.print_Pars()
-        #print("----- %s seconds -----" % (time() - start_time))
-        # wrap input arrays to C++ STL vector<double> object
-        #theory_data_DBVec = m.DBVec(theory_data.flatten())
-        #lambdas_DBVec = m.DBVec(lambdas.flatten())
-        #bandpasses_DBVec = m.DBVec(self.bandpass(lambdas).flatten())
-        #grism_img_DBVec = m.DBVec(np.zeros([self.Ny, self.Nx]).flatten())
+        print("----- print pars | %s seconds -----" % (time() - start_time))
         bandpasses = self.bandpass(lambdas)
         grism_img_array = np.zeros([self.Ny, self.Nx], 
             dtype=np.float64, order='C')
-        #print("----- %s seconds -----" % (time() - start_time))
-        #status = m.stack(theory_data_DBVec, lambdas_DBVec, bandpasses_DBVec, 
-        #    grism_img_DBVec)
+        print("----- init BP and grism img | %s seconds -----" % (time() - start_time))
         status = m.stack(theory_data, lambdas, bandpasses, grism_img_array)
-        #print("----- %s seconds -----" % (time() - start_time))
+        print("----- stacking | %s seconds -----" % (time() - start_time))
         assert (status == 0), "ERROR: cpp extension stack() failed!"
         # wrap dispersed image vector<double> to galsim.Image object
         grism_img = gs.Image(
-            #np.array(grism_img_DBVec).reshape([self.Ny, self.Nx]),
             grism_img_array,
             dtype = np.float64, scale=self.pix_scale, 
             )
-        #print("----- %s seconds -----" % (time() - start_time))
+        print("----- wrap image | %s seconds -----" % (time() - start_time))
         # convolve with achromatic psf, if required
         if self.hasPSF and not self.hasChromaticPSF:
-            _kwargs = {}
             if self.psf_type == 'airy_mean':
-                _kwargs['lam_mean'] = np.mean(lambdas)
-            psf = self._build_PSF_model(_kwargs)
+                psf = self._build_PSF_model(lam_mean = np.mean(lambdas))
+            else:
+                psf = self._build_PSF_model()
             _gal = gs.InterpolatedImage(grism_img, scale=self.pix_scale)
             grism_gal = gs.Convolve([_gal, psf])
             grism_img = grism_gal.drawImage(nx=self.Nx, ny=self.Ny, 
                                             scale=self.pix_scale)
-        #print("----- %s seconds -----" % (time() - start_time))
+        print("----- convolv PSF | %s seconds -----" % (time() - start_time))
         # apply noise
         if force_noise_free:
             return grism_img.array, None
