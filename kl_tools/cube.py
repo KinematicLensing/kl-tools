@@ -475,8 +475,16 @@ class GrismGenerator(DataVector):
 
         '''
         # theory_slice in units of photons/s/cm2
+        gsp = gs.GSParams(
+            folding_threshold = 1.0e-05,
+            stepk_minimum_hlr = 10,
+            maxk_threshold = 1e-4,
+            kvalue_accuracy = 1e-6,
+            xvalue_accuracy = 1e-6,
+
+            )
         _img = gs.Image(theory_slice, make_const=True, scale=self.scale)
-        _gal = gs.InterpolatedImage(_img, scale=self.scale)
+        _gal = gs.InterpolatedImage(_img, scale=self.scale, gsparams=gsp)
         slice_bandpass = self.bandpass.truncate(blue_limit=lambdas[0], 
                                             red_limit=lambdas[1])
         # if we adopt chromatic PSF, convolve with PSF model here
