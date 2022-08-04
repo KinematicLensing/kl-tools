@@ -1,3 +1,7 @@
+/* OLD BRANCH!!!
+ *
+ * */
+
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -5,9 +9,11 @@
 #include <string>
 #include <complex>
 #include <vector>
+#include <map>
 #include <time.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl_bind.h>
+#include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
 #define STRINGIFY(x) #x
@@ -29,6 +35,14 @@ namespace py = pybind11;
 using namespace std;
 
 /* Parameter Structure
+ *
+ * TODO:
+ *  - wrap these parameters and related functions into a class structure.
+ *    Note that since these parameters are related with specific exposure,
+ *    the class object should be similar to "data_generator" type object in
+ *    the kl-tools pipeline
+ *  - checkout the latest Spencer's updates, and think about merge the repos.
+ *    Should tail the code such that easy fit into Spencer's branch.
  * Related parameters
  * - theory cube pixel scale
  * - theory cube pixel dimension
@@ -70,7 +84,30 @@ Pars pars = {.theory_cube_Nx = 0,
              .diameter_in_cm = 0.0,
              .exptime_in_sec = 0.0,
              .gain = 0.0};
+class grism_config{
+  public:
+    grism_config();
 
+private:
+  // 3D Theory cube dimension
+  int theory_cube_Nx;
+  int theory_cube_Ny;
+  int theory_cube_Nlam;
+  double theory_cube_scale;
+  // 2D Observed image dimension
+  int observed_image_Nx;
+  int observed_image_Ny;
+  double observed_image_scale;
+  // Grism dispersion
+  double R_spec;
+  double disper_angle;
+  double offset;
+  // exposure time calculation
+  double diameter_in_cm;
+  double exptime_in_sec;
+  double gain;
+  //
+};
 int cpp_set_pars(int theory_cube_Nx, int theory_cube_Ny, int theory_cube_Nlam,
                    double theory_cube_scale, int observed_image_Nx,
                    int observed_image_Ny, double observed_image_scale,
@@ -125,25 +162,21 @@ int cpp_print_Pars()
  *      double lam: central wavelength in nm of the current slice
  *      vector<double> &shift: the returned resulting shift vector.
  * */
-int cpp_dispersion_relation(double lam, vector<double> &shift)
+int cpp_dispersion_relation(double lam, vector<double> &shift,
+                            const py::dict &config)
 {
-    static int INIT = 0;
-    static double dxdlam = 0.0;
-    static vector<double> disp_vec{0.0, 0.0};
-    // initialize dispersion relation
-    if(INIT == 0){
-        dxdlam = pars.R_spec / 500.0;
-        disp_vec[0] = cos(pars.disper_angle);
-        disp_vec[1] = sin(pars.disper_angle);
-        INIT = 1;
-    }
-    shift[0] = (lam * dxdlam + pars.offset) * disp_vec[0];
-    shift[1] = (lam * dxdlam + pars.offset) * disp_vec[1];
-    return 0;
+  double dxdlam = double(py::float_(config["R_spec"])) / 500.0;
+  vector<double> disp_vec{cos(double(py::float_(config["disp_ang"]))),
+                          sin(double(py::float_(config["disp_ang"])))};
+  double offset = py::float_(config["offset"]);
+  shift[0] = (lam * dxdlam + offset) * disp_vec[0];
+  shift[1] = (lam * dxdlam + offset) * disp_vec[1];
+  return 0;
 }
 double obs2theory_arcsec(double center, int edge, double shift_in_pix,
-                         double ref){
-    return center+(edge*0.5-shift_in_pix)*pars.observed_image_scale-ref;
+                         double ref, const py::dict &config){
+    double pix_scale = py::float_(config["pix_scale"]);
+    return center+(edge*0.5-shift_in_pix)*pix_scale-ref;
 }
 /* Generate simulated grism image out of theory 3d model cube, but with CPP
  * implementation.
@@ -172,8 +205,21 @@ int cpp_stack(
   const py::array_t<double, py::array::c_style | py::array::forcecast> theory_data,
   const py::array_t<double, py::array::c_style | py::array::forcecast> lambdas,
   const py::array_t<double, py::array::c_style | py::array::forcecast> bandpasses,
-  py::array_t<double, py::array::c_style | py::array::forcecast> dispersed_data)
+  py::array_t<double, py::array::c_style | py::array::forcecast> dispersed_data,
+  const py::dict &config)
 {
+  // unpack config pars
+  int model_Nx = py::int_(config["model_Nx"]);
+  int model_Ny = py::int_(config["model_Ny"]);
+  int model_Nlam = py::int_(config["model_Nlam"]);
+  double model_scale = py::float_(config["model_scale"]);
+  int Nx = py::int_(config["Nx"]);
+  int Ny = py::int_(config["Ny"]);
+  double pix_scale = py::float_(config["pix_scale"]);
+  double diameter = py::float_(config["diameter"]);
+  double exp_time = py::float_(config["exp_time"]);
+  double gain = py::float_(config["gain"]);
+
   int i,j,k;
   double l,r,t,b,lb,rb,tb,bb;
   int li,ri,ti,bi;
@@ -193,11 +239,11 @@ int cpp_stack(
     throw runtime_error("`dispersed_data` dimension must be 2!");
   if( (buf_td.shape[0] != buf_l.shape[0]) || \
       (buf_td.shape[0] != buf_bp.shape[0]) || \
-      (buf_td.shape[0] != pars.theory_cube_Nlam))
+      (buf_td.shape[0] != model_Nlam))
     throw runtime_error("`theory_data`, `lambdas` and `bandpasses` must have the same Nlam!");
-  if((buf_td.shape[1] != pars.theory_cube_Ny) || (buf_td.shape[2] != pars.theory_cube_Nx))
+  if((buf_td.shape[1] != model_Ny) || (buf_td.shape[2] != model_Nx))
     throw runtime_error("`theory_data` dimension wrong!");
-  if(buf_dd.shape[0] != pars.observed_image_Ny || buf_dd.shape[1] != pars.observed_image_Nx)
+  if(buf_dd.shape[0] != model_Ny || buf_dd.shape[1] != model_Nx)
     throw runtime_error("`dispersed_data` dimension wrong!");
   // get pointer to the buffer data memory
   auto *ptr_td = static_cast<double *>(buf_td.ptr);
@@ -208,55 +254,55 @@ int cpp_stack(
   // init coordinates
   // Note that those coordinates are static variables to save computation time.
   // theory model cube
-  double Rx_theory = (int)(pars.theory_cube_Nx/2) - \
-                            0.5 * ((pars.theory_cube_Nx - 1) % 2);
-  double Ry_theory = (int)(pars.theory_cube_Ny/2) - \
-                            0.5 * ((pars.theory_cube_Ny - 1) % 2);
-  vector<double> origin_Xgrid(pars.theory_cube_Nx, 0.0);
-  vector<double> origin_Ygrid(pars.theory_cube_Ny, 0.0);
+  double Rx_theory = (int)(model_Nx/2) - \
+                            0.5 * ((model_Nx - 1) % 2);
+  double Ry_theory = (int)(model_Ny/2) - \
+                            0.5 * ((model_Ny - 1) % 2);
+  vector<double> origin_Xgrid(model_Nx, 0.0);
+  vector<double> origin_Ygrid(model_Ny, 0.0);
   //cout << "Rx_theory = " << Rx_theory << endl;
   //cout << "Init X grid (theory cube): " << endl;
-  for(i=0; i<pars.theory_cube_Nx; i++){
-    origin_Xgrid[i] = (i - Rx_theory) * pars.theory_cube_scale;
+  for(i=0; i<model_Nx; i++){
+    origin_Xgrid[i] = (i - Rx_theory) * model_scale;
     //cout << origin_Xgrid[i] << " ";
   }
   //cout << endl;
   //cout << "Init Y grid (theory cube): " << endl;
-  for(i=0; i<pars.theory_cube_Ny; i++){
-    origin_Ygrid[i] = (i - Ry_theory) * pars.theory_cube_scale;
+  for(i=0; i<model_Ny; i++){
+    origin_Ygrid[i] = (i - Ry_theory) * model_scale;
     //cout << origin_Ygrid[i] << " ";
   }
   //cout << endl;
-  double ob_x = origin_Xgrid[0] - 0.5*pars.theory_cube_scale;
-  double ob_y = origin_Ygrid[0] - 0.5*pars.theory_cube_scale;
+  double ob_x = origin_Xgrid[0] - 0.5*model_scale;
+  double ob_y = origin_Ygrid[0] - 0.5*model_scale;
   //cout << "corner of the theory cube frame: "<< ob_x << ob_y << endl;
   // observed image
-  double Rx = (int)(pars.observed_image_Nx/2) - \
-                      0.5 * ((pars.observed_image_Nx - 1) % 2);
-  double Ry = (int)(pars.observed_image_Ny/2) - \
-                      0.5 * ((pars.observed_image_Ny - 1) % 2);
-  vector<double> target_Xgrid(pars.observed_image_Nx, 0.0);
-  vector<double> target_Ygrid(pars.observed_image_Ny, 0.0);
+  double Rx = (int)(Nx/2) - \
+                      0.5 * ((Nx - 1) % 2);
+  double Ry = (int)(Ny/2) - \
+                      0.5 * ((Ny - 1) % 2);
+  vector<double> target_Xgrid(Nx, 0.0);
+  vector<double> target_Ygrid(Ny, 0.0);
   //cout << "Rs_obs = " << Rx << endl;
   //cout << "Init X grid (observed image): " << endl;
-  for(i=0; i<pars.observed_image_Nx; i++){
-    target_Xgrid[i] = (i - Rx) * pars.observed_image_scale;
+  for(i=0; i<Nx; i++){
+    target_Xgrid[i] = (i - Rx) * pix_scale;
     //cout << target_Xgrid[i] << " ";
   }
   //cout << endl << "Init Y grid (observed image): " << endl;
-  for(i=0; i<pars.observed_image_Ny; i++){
-    target_Ygrid[i] = (i - Ry) * pars.observed_image_scale;
+  for(i=0; i<Ny; i++){
+    target_Ygrid[i] = (i - Ry) * pix_scale;
     //cout << target_Ygrid[i] << " ";
   }
   //cout << endl;
   // exptime calculation
-  double flux_scale = PI*pow((pars.diameter_in_cm/2.0), 2)*\
-                      pars.exptime_in_sec/pars.gain;
+  double flux_scale = PI*pow((diameter/2.0), 2)*\
+                      exp_time/gain;
 
   // init dispersed_data
   for(size_t index = 0; index < buf_dd.size; index++){ptr_dd[index] = 0.0;}
   // looping through theory data cube
-  for (i=0; i<pars.theory_cube_Nlam; i++){
+  for (i=0; i<model_Nlam; i++){
     vector<double> shift{0.0, 0.0}; // in units of pixel
     double blue_limit = ptr_l[2*i+0];
     double red_limit = ptr_l[2*i+1];
@@ -267,12 +313,12 @@ int cpp_stack(
     //double mean_bp = (bandpasses[2*i+0] + bandpasses[2*i+1])/2.0;
     double mean_bp = (ptr_bp[2*i+0] + ptr_bp[2*i+1])/2.0;
     // for each slice, disperse & interpolate
-    cpp_dispersion_relation(mean_wave, shift);
+    cpp_dispersion_relation(mean_wave, shift, config);
     //cout << "slice " << i << " shift = (" << shift[0] << ", " << shift[1] << \
     //  ")" << "mean wavelength = " << mean_wave << endl;
     // loop through the dispersed image
-    for(j=0; j<pars.observed_image_Ny; j++){
-      for(k=0; k<pars.observed_image_Nx; k++){
+    for(j=0; j<Ny; j++){
+      for(k=0; k<Nx; k++){
         /* For each pixel in the dispersed image, find its original
          * pixels who contribute its flux. Then distribute the photons
          * from the theory cube to the observed image. If part of the
@@ -282,14 +328,14 @@ int cpp_stack(
         // arcsec, then map these corners to theory model cube, in units
         // of arcsec w.r.t. the lower-left corner of the theory model
         // cube pixel.
-        l = obs2theory_arcsec(target_Xgrid[k], -1, shift[0], ob_x);
-        r = obs2theory_arcsec(target_Xgrid[k], 1, shift[0], ob_x);
-        b = obs2theory_arcsec(target_Ygrid[j], -1, shift[1], ob_y);
-        t = obs2theory_arcsec(target_Ygrid[j], 1, shift[1], ob_y);
-        lb = fmin(fmax(l/pars.theory_cube_scale, 0), pars.theory_cube_Nx);
-        rb = fmin(fmax(r/pars.theory_cube_scale, 0), pars.theory_cube_Nx);
-        bb = fmin(fmax(b/pars.theory_cube_scale, 0), pars.theory_cube_Ny);
-        tb = fmin(fmax(t/pars.theory_cube_scale, 0), pars.theory_cube_Ny);
+        l = obs2theory_arcsec(target_Xgrid[k], -1, shift[0], ob_x, config);
+        r = obs2theory_arcsec(target_Xgrid[k], 1, shift[0], ob_x, config);
+        b = obs2theory_arcsec(target_Ygrid[j], -1, shift[1], ob_y, config);
+        t = obs2theory_arcsec(target_Ygrid[j], 1, shift[1], ob_y, config);
+        lb = fmin(fmax(l/model_scale, 0), model_Nx);
+        rb = fmin(fmax(r/model_scale, 0), model_Nx);
+        bb = fmin(fmax(b/model_scale, 0), model_Ny);
+        tb = fmin(fmax(t/model_scale, 0), model_Ny);
         li = floor(lb);
         ri = ceil(rb);
         bi = floor(bb);
