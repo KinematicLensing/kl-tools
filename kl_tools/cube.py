@@ -387,19 +387,40 @@ class GrismGenerator(DataVector):
             raise ValueError(f'theory_data and lambdas must have the same'+\
                 ' dimension in along axis 0')
         # prepare for the cpp routine
-        status = m.set_pars(
-            self.Nx_theory, self.Ny_theory, lambdas.shape[0], self.scale,
-            self.Nx, self.Ny, self.pix_scale, self.R_spec, self.disp_ang,
-            self.offset, self.diameter, self.exp_time, self.gain)
-        assert (status == 0), "ERROR: cpp extension set_pars() failed!"
-        if print_cpp_pars:
-            m.print_Pars()
-        print("----- print pars | %s seconds -----" % (time() - start_time))
+        cpp_pars_dict = {
+            'model_Nx': self.Nx_theory,
+            'model_Ny': self.Ny_theory,
+            'model_Nlam': lambdas.shape[0],
+            'model_scale': self.scale,
+            'Nx': self.Nx,
+            'Ny': self.Ny,
+            'pix_scale': self.pix_scale,
+            'diameter': self.diameter,
+            'exp_time': self.exp_time,
+            'gain': self.gain,
+            'offset': self.offset,
+            'R_spec': self.R_spec,
+            'disp_ang': self.disp_ang,
+        }
+        #status = m.set_pars(
+        #    self.Nx_theory, self.Ny_theory, lambdas.shape[0], self.scale,
+        #    self.Nx, self.Ny, self.pix_scale, self.R_spec, self.disp_ang,
+        #    self.offset, self.diameter, self.exp_time, self.gain)
+        #assert (status == 0), "ERROR: cpp extension set_pars() failed!"
+        #if print_cpp_pars:
+        #    m.print_Pars()
+        #print("----- print pars | %s seconds -----" % (time() - start_time))
         bandpasses = self.bandpass(lambdas)
         grism_img_array = np.zeros([self.Ny, self.Nx], 
             dtype=np.float64, order='C')
         print("----- init BP and grism img | %s seconds -----" % (time() - start_time))
-        status = m.stack(theory_data, lambdas, bandpasses, grism_img_array)
+        status = m.stack(
+            theory_data, 
+            lambdas, 
+            bandpasses, 
+            grism_img_array,
+            cpp_pars_dict
+        )
         print("----- stacking | %s seconds -----" % (time() - start_time))
         assert (status == 0), "ERROR: cpp extension stack() failed!"
         # wrap dispersed image vector<double> to galsim.Image object
